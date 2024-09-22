@@ -1,0 +1,16 @@
+{
+  "tasks": {
+    "dev": "deno run --watch --allow-read=./.env,./db.sqlite --allow-write=./db.sqlite --allow-env --allow-ffi --allow-net src/main.ts"
+  },
+  "fmt": {
+    "indentWidth": 2,
+    "singleQuote": true,
+    "semiColons": false
+  },
+  "imports": {
+    "@epi/ollama": "jsr:@epi/ollama@^0.0.7",
+    "@libsql/client": "npm:@libsql/client@^0.14.0",
+    "defu": "npm:defu@^6.1.4",
+    "grammy": "https://deno.land/x/grammy@v1.30.0/mod.ts"
+  }
+}
