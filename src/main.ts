@@ -9,6 +9,7 @@ const systemPrompt =
 const bot = new Bot(Deno.env.get('TELEGRAM_BOT_TOKEN') || '')
 
 const ollama = useOllama({
+  host: Deno.env.get('OLLAMA_HOST'),
   model: Deno.env.get('OLLAMA_MODEL'),
 })
 
