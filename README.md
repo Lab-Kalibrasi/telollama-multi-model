@@ -37,8 +37,7 @@ Telollama is a fun Telegram bot project built with [Deno](https://deno.land) and
 
 ## Usage
 
-1. Add the bot to your Telegram app by searching for the bot username.
-2. Start chatting with the bot to see the magic of Ollama's AI in action, powered by the `gemma2:2b` model (or another model if you set it in the `.env` file).
+Just chat with the bot—have fun and enjoy the AI-powered responses! Hehe 😄
 
 ## Changing the Ollama Model
 
