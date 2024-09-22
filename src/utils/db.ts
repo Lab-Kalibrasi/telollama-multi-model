@@ -4,8 +4,8 @@ import type { OllamaMessage } from './ollama.ts'
 
 export const useDB = (config: Partial<Config>) => {
   config = defu({
-    url: 'file:db.sqlite',
-  })
+    url: ':memory:',
+  }, config)
 
   const turso = createClient(config as Config)
 

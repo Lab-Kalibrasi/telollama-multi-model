@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-read=./.env,./db.sqlite --allow-write=./db.sqlite --allow-env --allow-ffi --allow-net src/main.ts"
+    "dev": "deno run --watch --allow-read --allow-write --allow-env --allow-ffi --allow-net src/main.ts"
   },
   "fmt": {
     "indentWidth": 2,
