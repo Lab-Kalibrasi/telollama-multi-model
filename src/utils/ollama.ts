@@ -12,11 +12,11 @@ export interface OllamaOptions {
 }
 
 export function useOllama(options: Partial<OllamaOptions>) {
-  options = defu({
+  options = defu(options, {
     host: 'http://localhost:11434',
     model: 'gemma2:2b',
     stream: false,
-  }, options)
+  })
 
   const chat = async (messages: OllamaMessage[]) => {
     const data = {

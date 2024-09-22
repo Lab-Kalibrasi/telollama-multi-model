@@ -3,9 +3,9 @@ import { defu } from 'defu'
 import type { OllamaMessage } from './ollama.ts'
 
 export const useDB = (config: Partial<Config>) => {
-  config = defu({
+  config = defu(config, {
     url: ':memory:',
-  }, config)
+  })
 
   const turso = createClient(config as Config)
 
