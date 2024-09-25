@@ -1,46 +1,43 @@
 # Telollama Multi Model Plus
 
-Telollama is an engaging Telegram bot built with [Deno](https://deno.land) that uses [OpenRouter](https://openrouter.ai/) and [Google AI](https://ai.google.dev/) to access various AI models. The bot features a dynamic female tsundere personality inspired by Asuka Langley Soryu from Neon Genesis Evangelion for fun and engaging conversations.
+Telollama is a Telegram bot that uses multiple AI models to create fun conversations. It acts like Asuka from Neon Genesis Evangelion, with a tsundere personality.
 
 ![Tellolama Demo](tellolama-demo.png)
 
-[Try the Telegram Bot Demo](https://t.me/nekocharm_99_bot)
+[Try the Telegram Bot](https://t.me/nekocharm_99_bot)
 
-## Key Features
+## Main Features
 
-- 🤖 Seamless Telegram integration using [Telegram Bot API](https://core.telegram.org/bots/api)
-- 🧠 Multiple AI models via OpenRouter (Nous Hermes, Meta's Llama) and Google AI (Gemini Pro)
-- 👩 Dynamic tsundere personality with evolving emotions and behaviors
-- 🎭 Advanced emotion system affecting responses and language model parameters
-- 🧬 Context-aware responses with memory of key conversation points
-- 🇮🇩 Responds in Bahasa Indonesia
-- 🎛️ Adaptive conversation flow based on topics, preferences, and dynamic parameters
-- 🎨 Diverse personality traits and response templates
-- 💾 Persistent storage of topic-specific responses for improved contextual replies
-- 🔄 Automatic fallback to alternative models if one fails
-- 🌡️ Dynamic adjustment of language model parameters based on emotional state
+- Works with Telegram
+- Uses different AI models (OpenRouter and Google AI)
+- Has a changing personality that can be happy, angry, or shy
+- Remembers parts of conversations
+- Responds in Bahasa Indonesia
+- Changes how it talks based on the conversation
+- Stores special responses for different topics
+- Switches to a different AI if one stops working
+- Adjusts its language based on its mood
 
-## Capabilities
+## What It Can Do
 
-- Maintains a consistent tsundere personality inspired by Asuka Langley Soryu
-- Adjusts responses based on the current emotion and tsundere level
-- Remembers and references previous conversations about Eva and piloting skills
-- Tracks user's performance in various topics and reacts accordingly
-- Generates custom prompts for each interaction, incorporating context and personality
-- Handles multiple topics with specific responses, stored and retrieved from the database
-- Adapts language model parameters (temperature, presence penalty, frequency penalty) based on emotional state
-- Prevents repetitive responses by tracking recent replies
-- Logs detailed information about each interaction for analysis
+- Acts like Asuka from Evangelion
+- Changes its answers based on its mood
+- Remembers past talks about Eva and piloting
+- Keeps track of what topics the user is good at
+- Makes special responses for each chat
+- Handles many topics with saved responses
+- Avoids repeating itself
+- Keeps a record of each chat for checking later
 
-## Quick Start
+## How to Start
 
-1. Clone the repository:
+1. Copy the project files:
    ```bash
    git clone https://github.com/ceroberoz/telollama-multi-model.git
    cd telollama-multi-model
    ```
 
-2. Set up your `.env` file with necessary credentials:
+2. Make a `.env` file with your login details:
    ```env
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
    OPENROUTER_API_KEY=your_openrouter_api_key
@@ -51,32 +48,32 @@ Telollama is an engaging Telegram bot built with [Deno](https://deno.land) that 
    YOUR_SITE_NAME=your_site_name
    ```
 
-3. Run the bot:
+3. Start the bot:
    ```bash
    deno run -A --unstable-kv ./src/main.ts
    ```
 
-## Advanced Features
+## Cool Extras
 
-- Dynamic adjustment of language model parameters based on emotional state
-- Adaptive tsundere level affecting openness and response style
-- Enhanced topic memory for contextually relevant interactions
-- User preference analysis for personalized conversations
-- Nuanced emotion transitions
-- Fallback mechanism for model selection to ensure continuous operation
+- Changes how it talks based on its mood
+- Acts more or less friendly depending on the chat
+- Remembers topics better for more natural talks
+- Learns what the user likes for better chats
+- Slowly changes its mood
+- Uses a backup AI if the first one doesn't work
 
-## Technologies
+## Tools Used
 
-- [Deno](https://deno.land/)
-- [Telegram Bot API](https://core.telegram.org/bots/api)
-- [OpenRouter](https://openrouter.ai/)
-- [Google AI](https://ai.google.dev/)
-- [Turso](https://turso.tech/) for database storage
+- Deno
+- Telegram Bot API
+- OpenRouter
+- Google AI
+- Turso for saving data
 
-## Contributing
+## Want to Help?
 
-Contributions are welcome! Feel free to submit pull requests or open issues.
+Feel free to suggest changes or report problems!
 
 ## License
 
-This project is licensed under the MIT License.
+This project uses the MIT License.

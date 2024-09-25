@@ -2,7 +2,7 @@ import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts"
 import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
 import { useDB, Message } from './utils/db.ts';
 import "https://deno.land/std@0.177.0/dotenv/load.ts";
-import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.19.0";
+import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "https://esm.sh/@google/generative-ai@0.19.0";
 
 const personalityTraits = [
   "Fiercely competitive",
@@ -68,6 +68,29 @@ const openai = new OpenAI({
 
 const googleAI = new GoogleGenerativeAI(Deno.env.get("GOOGLE_AI_API_KEY") || "");
 
+const safetySettings = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+  },
+];
+
 const { getMessages, getTopicResponses, saveMessages, saveTopicResponse } = useDB({
   url: Deno.env.get("DATABASE_URL") || "",
   authToken: Deno.env.get("DATABASE_API_TOKEN") || "",
@@ -123,7 +146,10 @@ const modelAdapters = {
     return completion.choices[0].message.content;
   },
   "google/gemini-pro": async (messages: Message[], prompt: string) => {
-    const generativeModel = googleAI.getGenerativeModel({ model: "gemini-pro" });
+    const generativeModel = googleAI.getGenerativeModel({
+      model: "gemini-pro",
+      safetySettings: safetySettings
+    });
     const result = await generativeModel.generateContent({
       contents: [
         { role: "user", parts: [{ text: prompt }] },
@@ -341,8 +367,6 @@ async function generateCustomPrompt(chatId: number, botName: string, latestUserM
 }
 
 async function summarizeConversation(messages: Message[]): Promise<string> {
-  // For now, we'll just use the last message as a summary.
-  // In the future, you might want to implement a more sophisticated summarization logic.
   return messages[messages.length - 1]?.content || "";
 }
 
@@ -374,7 +398,6 @@ function postProcessResponse(response: string): string {
   if (!response.includes(tsunderePhrase)) {
     response = `${tsunderePhrase} ${response}`;
   }
-  // Add more character-specific adjustments here if needed
   return response;
 }
 
