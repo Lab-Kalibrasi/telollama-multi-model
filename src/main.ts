@@ -2,7 +2,7 @@ import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts"
 import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
 import { useDB } from './utils/db.ts';
 import "https://deno.land/std@0.177.0/dotenv/load.ts";
-import { GoogleGenerativeAI } from "https://esm.sh/@google-ai/generativelanguage@0.2.1";
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.1.3";
 
 const personalityTraits = [
   "Fiercely competitive",
@@ -126,19 +126,8 @@ let botMemory: Memory = {
 async function healthCheck(model: string): Promise<boolean> {
   try {
     if (model.startsWith("google/")) {
-      const generationConfig = {
-        stopSequences: ["Human:", "Assistant:"],
-        maxOutputTokens: 1,
-        temperature: 0.1,
-        topP: 0.1,
-        topK: 16,
-      };
-
-      const result = await googleAI.getGenerativeModel({ model: model.replace("google/", "") }).generateContent({
-        contents: [{ role: "user", parts: [{ text: "Hi" }] }],
-        generationConfig,
-      });
-
+      const generativeModel = googleAI.getGenerativeModel({ model: model.replace("google/", "") });
+      const result = await generativeModel.generateContent("Hi");
       return result.response.candidates.length > 0;
     } else {
       const completion = await openai.chat.completions.create({
@@ -387,23 +376,12 @@ bot.on("message", async (ctx) => {
     let message: string;
 
     if (selectedModel.startsWith("google/")) {
-      const generationConfig = {
-        stopSequences: ["Human:", "Assistant:"],
-        maxOutputTokens: 150,
-        temperature: temperature,
-        topP: 0.95,
-        topK: 40,
-      };
-
-      const result = await googleAI.getGenerativeModel({ model: selectedModel.replace("google/", "") }).generateContent({
-        contents: [
-          { role: "system", parts: [{ text: customPrompt }] },
-          ...messages.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] })),
-          { role: "user", parts: [{ text: userMessage }] },
-        ],
-        generationConfig,
-      });
-
+      const generativeModel = googleAI.getGenerativeModel({ model: selectedModel.replace("google/", "") });
+      const result = await generativeModel.generateContent([
+        { role: "system", parts: [{ text: customPrompt }] },
+        ...messages.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] })),
+        { role: "user", parts: [{ text: userMessage }] },
+      ]);
       message = result.response.candidates[0].content.parts[0].text;
     } else {
       const completion = await openai.chat.completions.create({
