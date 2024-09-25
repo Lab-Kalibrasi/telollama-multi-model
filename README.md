@@ -1,6 +1,6 @@
 # Telollama Multi Model Plus
 
-Telollama is an engaging Telegram bot project built with [Deno](https://deno.land) that now utilizes [OpenRouter](https://openrouter.ai/) to access various AI models. The bot embodies a tsundere personality, making for fun and dynamic conversations with Telegram users.
+Telollama is an engaging Telegram bot project built with [Deno](https://deno.land) that now utilizes [OpenRouter](https://openrouter.ai/) to access various AI models. The bot embodies a female tsundere personality, making for fun and dynamic conversations with Telegram users.
 
 ![Tellolama Demo](tellolama-demo.png)
 
@@ -10,11 +10,12 @@ Telollama is an engaging Telegram bot project built with [Deno](https://deno.lan
 
 - 🤖 **Telegram Bot Integration**: Seamlessly connects with Telegram using [Telegram Bot API](https://core.telegram.org/bots/api).
 - 🧠 **Multiple AI Models**: Utilizes OpenRouter to access various AI models, including Meta's Llama, Mistral AI, and Google's Gemma.
-- 😳 **Tsundere Personality**: Implements a dynamic tsundere personality that evolves throughout the conversation.
-- 🎭 **Emotion System**: Features an emotion system that affects the bot's responses, including anger.
-- 🧬 **Context-Aware Responses**: Maintains conversation context for more coherent interactions.
-- 💾 **Memory System**: Remembers key points from earlier in the conversation, including compliments and angry outbursts.
+- 👩 **Female Tsundere Personality**: Implements a dynamic female tsundere personality that evolves throughout the conversation.
+- 🎭 **Advanced Emotion System**: Features a sophisticated emotion system that affects the bot's responses and language model parameters.
+- 🧬 **Context-Aware Responses**: Maintains conversation context for more coherent and personalized interactions.
+- 💾 **Enhanced Memory System**: Remembers key points from earlier in the conversation, including compliments, angry outbursts, and mentioned topics.
 - 🇮🇩 **Bahasa Indonesia**: Responds in Bahasa Indonesia, catering to Indonesian users.
+- 🎛️ **Dynamic Parameter Adjustment**: Automatically adjusts language model parameters based on the bot's current emotional state.
 
 ## Installation
 
@@ -47,31 +48,38 @@ Telollama is an engaging Telegram bot project built with [Deno](https://deno.lan
    deno run -A --unstable-kv ./src/main.ts
    ```
 
-## Usage
+   ## Usage
 
-Simply start a chat with the bot on Telegram. The bot will respond with a tsundere personality, gradually warming up as the conversation progresses. It can discuss topics like anime and coding, adapting its responses based on the context of the conversation. The bot can now also express anger in response to certain triggers, adding more depth to its emotional range.
+   Start a chat with the bot on Telegram. The bot will respond with a female tsundere personality, dynamically adjusting its behavior based on the conversation context and its emotional state. It can discuss various topics, with a particular interest in anime and coding. The bot's responses will vary in unpredictability and topic consistency depending on whether it's in a "tsun" (more erratic) or "dere" (more consistent) state.
 
-## AI Models
+   ## AI Models
 
-The bot uses the following models through OpenRouter:
+   The bot uses the following models through OpenRouter:
 
-- Meta's Llama (llama-3-8b-instruct)
-- Mistral AI (mistral-7b-instruct)
-- Google's Gemma (gemma-2-9b-it)
+   - Meta's Llama (llama-3-8b-instruct)
+   - Mistral AI (mistral-7b-instruct)
+   - Google's Gemma (gemma-2-9b-it)
 
-The bot automatically selects an available model for each interaction.
+   The bot automatically selects an available model for each interaction and adjusts parameters like temperature and presence penalty based on its current emotional state.
 
-## Technologies Used
+   ## Technologies Used
 
-- [Deno](https://deno.land/) - A modern runtime for JavaScript and TypeScript
-- [Telegram Bot API](https://core.telegram.org/bots/api) - For creating the bot
-- [OpenRouter](https://openrouter.ai/) - For accessing various AI models
-- [Turso](https://turso.tech/) - For database storage
+   - [Deno](https://deno.land/) - A modern runtime for JavaScript and TypeScript
+   - [Telegram Bot API](https://core.telegram.org/bots/api) - For creating the bot
+   - [OpenRouter](https://openrouter.ai/) - For accessing various AI models
+   - [Turso](https://turso.tech/) - For database storage
 
-## Contributing
+   ## Advanced Features
 
-Contributions are welcome! Feel free to submit a pull request or open an issue to improve Telollama.
+   - **Dynamic Emotional Parameters**: The bot adjusts its language model parameters (temperature and presence penalty) based on its current emotional state, resulting in more varied and context-appropriate responses.
+   - **Personality Trait System**: Incorporates random personality traits into each interaction, adding depth to the bot's character.
+   - **Adaptive Tsundere Level**: The bot's tsundere level changes throughout the conversation, affecting its openness and response style.
+   - **Topic Memory**: Keeps track of mentioned anime and coding topics for more contextually relevant future interactions.
 
-## License
+   ## Contributing
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+   Contributions are welcome! Feel free to submit a pull request or open an issue to improve Telollama.
+
+   ## License
+
+   This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

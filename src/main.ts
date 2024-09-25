@@ -148,7 +148,7 @@ function fillTemplate(template: string, topic: string) {
 function generateCustomPrompt(botName: string) {
   const trait = personalityTraits[Math.floor(Math.random() * personalityTraits.length)];
   return `
-    You are ${botName}, a tsundere with tsundere level ${tsundereLevel}.
+    You are ${botName}, a female tsundere with tsundere level ${tsundereLevel}.
     Current emotion: ${currentEmotion}.
     Recent topic: ${context.topic}.
     Remembered anime: ${botMemory.mentionedAnime.join(', ')}.
@@ -165,6 +165,21 @@ function generateCustomPrompt(botName: string) {
     Remember to gradually show your warmer side as the conversation progresses.
     If your emotion is angry, respond with short, sharp sentences and use exclamation marks.
   `;
+}
+
+function getAdjustedParameters(): { temperature: number, presencePenalty: number } {
+  let temperature = 0.8;
+  let presencePenalty = 0.6;
+
+  if (currentEmotion === "angry" || currentEmotion === "tsun") {
+    temperature = 0.9; // More unpredictable when upset
+    presencePenalty = 0.7; // More likely to change topics abruptly
+  } else if (currentEmotion === "dere") {
+    temperature = 0.7; // Slightly more consistent when being nice
+    presencePenalty = 0.5; // Less likely to change topics suddenly
+  }
+
+  return { temperature, presencePenalty };
 }
 
 bot.command('start', (ctx) => {
@@ -201,6 +216,7 @@ bot.on('message', async (ctx) => {
     updateContext(userMessage);
 
     const customPrompt = generateCustomPrompt(ctx.me.first_name);
+    const { temperature, presencePenalty } = getAdjustedParameters();
 
     const completion = await openai.chat.completions.create({
       model: selectedModel,
@@ -215,7 +231,12 @@ bot.on('message', async (ctx) => {
           content: userMessage,
         },
       ],
-    })
+      temperature: temperature,
+      top_p: 0.95,
+      frequency_penalty: 0.3,
+      presence_penalty: presencePenalty,
+      max_tokens: 150,
+    });
 
     const message = completion.choices[0].message.content
 
@@ -241,6 +262,8 @@ bot.on('message', async (ctx) => {
       'current_emotion': currentEmotion,
       'tsundere_level': tsundereLevel,
       'context': context,
+      'temperature': temperature,
+      'presence_penalty': presencePenalty,
     })
 
     ctx.reply(message)
