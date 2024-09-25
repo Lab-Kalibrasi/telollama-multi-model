@@ -2,6 +2,10 @@
 
 Telollama is an engaging Telegram bot project built with [Deno](https://deno.land) that now utilizes [OpenRouter](https://openrouter.ai/) to access various AI models. The bot embodies a tsundere personality, making for fun and dynamic conversations with Telegram users.
 
+![Tellolama Demo](tellolama-demo.png)
+
+[Click here for Telegram Bot Demo](https://t.me/nekocharm_99_bot)
+
 ## Features
 
 - 🤖 **Telegram Bot Integration**: Seamlessly connects with Telegram using [Telegram Bot API](https://core.telegram.org/bots/api).
