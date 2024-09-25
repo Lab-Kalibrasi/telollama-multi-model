@@ -7,9 +7,9 @@ Telollama is an engaging Telegram bot project built with [Deno](https://deno.lan
 - 🤖 **Telegram Bot Integration**: Seamlessly connects with Telegram using [Telegram Bot API](https://core.telegram.org/bots/api).
 - 🧠 **Multiple AI Models**: Utilizes OpenRouter to access various AI models, including Meta's Llama, Mistral AI, and Google's Gemma.
 - 😳 **Tsundere Personality**: Implements a dynamic tsundere personality that evolves throughout the conversation.
-- 🎭 **Emotion System**: Features an emotion system that affects the bot's responses.
+- 🎭 **Emotion System**: Features an emotion system that affects the bot's responses, including anger.
 - 🧬 **Context-Aware Responses**: Maintains conversation context for more coherent interactions.
-- 💾 **Memory System**: Remembers key points from earlier in the conversation.
+- 💾 **Memory System**: Remembers key points from earlier in the conversation, including compliments and angry outbursts.
 - 🇮🇩 **Bahasa Indonesia**: Responds in Bahasa Indonesia, catering to Indonesian users.
 
 ## Installation
@@ -45,7 +45,7 @@ Telollama is an engaging Telegram bot project built with [Deno](https://deno.lan
 
 ## Usage
 
-Simply start a chat with the bot on Telegram. The bot will respond with a tsundere personality, gradually warming up as the conversation progresses. It can discuss topics like anime and coding, adapting its responses based on the context of the conversation.
+Simply start a chat with the bot on Telegram. The bot will respond with a tsundere personality, gradually warming up as the conversation progresses. It can discuss topics like anime and coding, adapting its responses based on the context of the conversation. The bot can now also express anger in response to certain triggers, adding more depth to its emotional range.
 
 ## AI Models
 

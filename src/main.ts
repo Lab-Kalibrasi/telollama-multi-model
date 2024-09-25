@@ -9,6 +9,7 @@ const personalityTraits = [
   "Secretly proud of coding skills",
   "Fond of using anime references",
   "Tries to act cool but often fails",
+  "Quick to anger but also quick to forgive",
 ];
 
 interface ConversationContext {
@@ -17,12 +18,13 @@ interface ConversationContext {
   botOpenness: number;
 }
 
-type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed";
+type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed" | "angry";
 
 interface Memory {
   mentionedAnime: string[];
   mentionedCodingTopics: string[];
   complimentsReceived: number;
+  angryOutbursts: number;
 }
 
 const topicResponses = {
@@ -39,6 +41,8 @@ const topicResponses = {
 const responseTemplates = [
   "H-hmph! :topic? Bukan berarti aku tertarik atau apa...",
   "K-kamu suka :topic juga? Y-yah, lumayan lah...",
+  "Apa-apaan sih!? Jangan bikin aku marah ya!",
+  "Kamu ini... benar-benar menyebalkan!",
 ];
 
 const bot = new Bot(Deno.env.get('TELEGRAM_BOT_TOKEN') || '')
@@ -89,10 +93,14 @@ let botMemory: Memory = {
   mentionedAnime: [],
   mentionedCodingTopics: [],
   complimentsReceived: 0,
+  angryOutbursts: 0,
 };
 
 function updateEmotion(message: string) {
-  if (message.toLowerCase().includes("anime") || message.toLowerCase().includes("coding")) {
+  if (message.toLowerCase().includes("marah") || message.toLowerCase().includes("kesal")) {
+    currentEmotion = "angry";
+    botMemory.angryOutbursts++;
+  } else if (message.toLowerCase().includes("anime") || message.toLowerCase().includes("coding")) {
     currentEmotion = Math.random() > 0.5 ? "excited" : "tsun";
   } else if (message.toLowerCase().includes("thank") || message.toLowerCase().includes("nice")) {
     currentEmotion = "dere";
@@ -106,6 +114,17 @@ function adjustTsundereLevel(message: string) {
   tsundereLevel = Math.max(0, tsundereLevel - 0.5);
   if (botMemory.complimentsReceived > 3) {
     tsundereLevel = Math.max(0, tsundereLevel - 1);
+  }
+  if (botMemory.angryOutbursts > 2) {
+    tsundereLevel = Math.min(10, tsundereLevel + 1);
+  }
+}
+
+function increaseAngerLevel(message: string) {
+  if (message.toLowerCase().includes("bodoh") || message.toLowerCase().includes("payah")) {
+    tsundereLevel = Math.min(10, tsundereLevel + 2);
+    currentEmotion = "angry";
+    botMemory.angryOutbursts++;
   }
 }
 
@@ -135,6 +154,7 @@ function generateCustomPrompt(botName: string) {
     Remembered anime: ${botMemory.mentionedAnime.join(', ')}.
     Remembered coding topics: ${botMemory.mentionedCodingTopics.join(', ')}.
     Compliments received: ${botMemory.complimentsReceived}.
+    Angry outbursts: ${botMemory.angryOutbursts}.
     Current personality trait: ${trait}.
     User interest level: ${context.userInterestLevel}.
     Your openness level: ${context.botOpenness}.
@@ -143,6 +163,7 @@ function generateCustomPrompt(botName: string) {
     Use tsundere-like expressions and adjust your tone based on your current emotion and tsundere level.
     If discussing ${context.topic}, consider using this response template: "${fillTemplate(responseTemplates[Math.floor(Math.random() * responseTemplates.length)], context.topic)}"
     Remember to gradually show your warmer side as the conversation progresses.
+    If your emotion is angry, respond with short, sharp sentences and use exclamation marks.
   `;
 }
 
@@ -175,6 +196,7 @@ bot.on('message', async (ctx) => {
   try {
     const userMessage = ctx.update.message.text || '';
     updateEmotion(userMessage);
+    increaseAngerLevel(userMessage);
     adjustTsundereLevel(userMessage);
     updateContext(userMessage);
 
