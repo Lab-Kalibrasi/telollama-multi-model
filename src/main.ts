@@ -97,22 +97,54 @@ let botMemory: Memory = {
   userPerformance: {},
 };
 
-const recentResponses: string[] = [];
+const modelAdapters = {
+  "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string) => {
+    const completion = await openai.chat.completions.create({
+      model: "nousresearch/hermes-3-llama-3.1-405b:free",
+      messages: [
+        { role: "system", content: prompt },
+        ...messages,
+      ],
+      temperature: 0.8,
+      max_tokens: 150,
+    });
+    return completion.choices[0].message.content;
+  },
+  "meta-llama/llama-3-8b-instruct:free": async (messages: Message[], prompt: string) => {
+    const completion = await openai.chat.completions.create({
+      model: "meta-llama/llama-3-8b-instruct:free",
+      messages: [
+        { role: "system", content: prompt },
+        ...messages,
+      ],
+      temperature: 0.8,
+      max_tokens: 150,
+    });
+    return completion.choices[0].message.content;
+  },
+  "google/gemini-pro": async (messages: Message[], prompt: string) => {
+    const generativeModel = googleAI.getGenerativeModel({ model: "gemini-pro" });
+    const result = await generativeModel.generateContent({
+      contents: [
+        { role: "user", parts: [{ text: prompt }] },
+        ...messages.map(msg => ({
+          role: msg.role === "assistant" ? "model" : "user",
+          parts: [{ text: msg.content }]
+        })),
+      ],
+    });
+    return result.response.text();
+  },
+};
 
 async function healthCheck(model: string): Promise<boolean> {
   try {
-    if (model.startsWith("google/")) {
-      const generativeModel = googleAI.getGenerativeModel({ model: model.replace("google/", "") });
-      const result = await generativeModel.generateContent("Hi");
-      return result.response.text().length > 0;
-    } else {
-      const completion = await openai.chat.completions.create({
-        model: model,
-        messages: [{ role: "user", content: "Hi" }],
-        max_tokens: 1,
-      });
-      return completion.choices.length > 0;
+    const adapter = modelAdapters[model];
+    if (!adapter) {
+      return false;
     }
+    const result = await adapter([{ role: "user", content: "Hi" }], "You are an AI assistant.");
+    return result.length > 0;
   } catch (error) {
     console.error(`Health check failed for model ${model}:`, error);
     return false;
@@ -209,7 +241,6 @@ async function getTopicResponse(chatId: number, topic: string): Promise<string> 
     return responses[Math.floor(Math.random() * responses.length)];
   }
 
-  // Fallback to the existing static responses if no dynamic response is found
   return fillTemplate(responseTemplates[Math.floor(Math.random() * responseTemplates.length)], topic);
 }
 
@@ -267,7 +298,6 @@ async function generateCustomPrompt(chatId: number, botName: string, latestUserM
   const tsunderePhrase = getTsunderePhrase(tsundereLevel, currentEmotion);
   const topicResponse = await getTopicResponse(chatId, context.topic);
 
-  // Get all topic responses from the database
   const allTopicResponses = await getTopicResponses(chatId);
   const topicResponsesString = Object.entries(allTopicResponses)
     .map(([topic, responses]) => `${topic}: ${responses.join(", ")}`)
@@ -310,39 +340,42 @@ async function generateCustomPrompt(chatId: number, botName: string, latestUserM
   `;
 }
 
-function getAdjustedParameters(): { temperature: number; presencePenalty: number; frequencyPenalty: number } {
-  let temperature = 0.8;
-  let presencePenalty = 0.6;
-  let frequencyPenalty = 0.3;
+async function summarizeConversation(messages: Message[]): Promise<string> {
+  // For now, we'll just use the last message as a summary.
+  // In the future, you might want to implement a more sophisticated summarization logic.
+  return messages[messages.length - 1]?.content || "";
+}
 
-  switch (currentEmotion) {
-    case "angry":
-    case "tsun":
-      temperature = 1.0;
-      presencePenalty = 0.8;
-      frequencyPenalty = 0.5;
-      break;
-    case "dere":
-    case "vulnerable":
-      temperature = 0.7;
-      presencePenalty = 0.5;
-      frequencyPenalty = 0.2;
-      break;
-    case "competitive":
-    case "proud":
-      temperature = 0.9;
-      presencePenalty = 0.7;
-      frequencyPenalty = 0.4;
-      break;
-    case "insecure":
-    case "annoyed":
-      temperature = 0.8;
-      presencePenalty = 0.6;
-      frequencyPenalty = 0.3;
-      break;
+async function generateResponse(chatId: number, userMessage: string) {
+  const messages = await getMessages(chatId);
+  const customPrompt = await generateCustomPrompt(chatId, bot.me.first_name, userMessage);
+  const conversationSummary = await summarizeConversation(messages.slice(-10));
+
+  const selectedModel = await getWorkingModel();
+  if (!selectedModel) {
+    throw new Error("No working model available");
   }
 
-  return { temperature, presencePenalty, frequencyPenalty };
+  const adapter = modelAdapters[selectedModel];
+  if (!adapter) {
+    throw new Error(`No adapter available for model: ${selectedModel}`);
+  }
+
+  const fullPrompt = `${customPrompt}\n\nConversation summary: ${conversationSummary}`;
+  let response = await adapter(messages.slice(-5), fullPrompt);
+
+  response = postProcessResponse(response);
+
+  return response;
+}
+
+function postProcessResponse(response: string): string {
+  const tsunderePhrase = getTsunderePhrase(tsundereLevel, currentEmotion);
+  if (!response.includes(tsunderePhrase)) {
+    response = `${tsunderePhrase} ${response}`;
+  }
+  // Add more character-specific adjustments here if needed
+  return response;
 }
 
 bot.command("start", (ctx) => {
@@ -354,16 +387,7 @@ bot.command("start", (ctx) => {
 bot.on("message", async (ctx) => {
   if (ctx.update.message.chat.type !== "private") return;
 
-  const messages = await getMessages(ctx.chat.id);
   bot.api.sendChatAction(ctx.chat.id, "typing");
-
-  const selectedModel = await getWorkingModel();
-
-  if (!selectedModel) {
-    console.error("All models failed health check");
-    ctx.reply("Hmph! Aku sedang tidak mood untuk bicara. Coba lagi nanti, baka!");
-    return;
-  }
 
   try {
     const userMessage = ctx.update.message.text || "";
@@ -371,62 +395,7 @@ bot.on("message", async (ctx) => {
     adjustTsundereLevel(userMessage);
     updateContext(userMessage);
 
-    const customPrompt = await generateCustomPrompt(ctx.chat.id, ctx.me.first_name, userMessage);
-    let { temperature, presencePenalty, frequencyPenalty } = getAdjustedParameters();
-
-    // Increase temperature slightly to encourage more diverse responses
-    temperature = Math.min(temperature + 0.2, 1.0);
-
-    let message: string;
-    let attempts = 0;
-    const maxAttempts = 3;
-
-    do {
-      if (selectedModel.startsWith("google/")) {
-        const generativeModel = googleAI.getGenerativeModel({ model: selectedModel.replace("google/", "") });
-        const result = await generativeModel.generateContent({
-          contents: [
-            { role: "user", parts: [{ text: customPrompt }] },
-            ...messages.slice(-5).map(msg => ({ role: msg.role === "assistant" ? "model" : "user", parts: [{ text: msg.content }] })),
-            { role: "user", parts: [{ text: userMessage }] },
-          ],
-        });
-        message = result.response.text();
-      } else {
-        const completion = await openai.chat.completions.create({
-          model: selectedModel,
-          messages: [
-            {
-              role: "system",
-              content: customPrompt,
-            },
-            ...messages.slice(-5),
-            {
-              role: "user",
-              content: userMessage,
-            },
-          ],
-          temperature: temperature,
-          top_p: 0.95,
-          frequency_penalty: frequencyPenalty,
-          presence_penalty: presencePenalty,
-          max_tokens: 150,
-        });
-
-        message = completion.choices[0].message.content;
-      }
-
-      attempts++;
-    } while (recentResponses.includes(message) && attempts < maxAttempts);
-
-    if (attempts >= maxAttempts) {
-      message = "Hmph! Aku tidak mau mengulang-ulang diriku. Coba tanya yang lain!";
-    }
-
-    recentResponses.push(message);
-    if (recentResponses.length > 5) {
-      recentResponses.shift();
-    }
+    const response = await generateResponse(ctx.chat.id, userMessage);
 
     if (userMessage.toLowerCase().includes("eva") && !botMemory.mentionedEva.includes(userMessage)) {
       botMemory.mentionedEva.push(userMessage);
@@ -435,14 +404,13 @@ bot.on("message", async (ctx) => {
       botMemory.mentionedPilotingSkills.push(userMessage);
     }
 
-    // Save the new response as a topic response if it's relevant
     if (context.topic !== "general") {
-      await saveTopicResponse(ctx.chat.id, context.topic, message);
+      await saveTopicResponse(ctx.chat.id, context.topic, response);
     }
 
     saveMessages(ctx.chat.id, [
       { role: "user", content: userMessage },
-      { role: "assistant", content: message },
+      { role: "assistant", content: response },
     ]);
 
     console.log({
@@ -450,25 +418,20 @@ bot.on("message", async (ctx) => {
       user_name: ctx.update.message.from.username || "",
       full_name: ctx.update.message.from.first_name || "",
       message: userMessage,
-      response: message,
-      model_used: selectedModel,
+      response: response,
+      model_used: await getWorkingModel(),
       current_emotion: currentEmotion,
       tsundere_level: tsundereLevel,
       context: context,
-      temperature: temperature,
-      presence_penalty: presencePenalty,
-      frequency_penalty: frequencyPenalty,
-      attempts: attempts,
     });
 
-    ctx.reply(message);
+    ctx.reply(response);
   } catch (error) {
     console.error("Error in chat completion:", error);
     ctx.reply("Baka! Ada yang salah. Coba lagi nanti, kalau kamu memang masih berani!");
   }
 });
 
-// Webhook handling
 const handleUpdate = webhookCallback(bot, "std/http");
 
 Deno.serve(async (req) => {
