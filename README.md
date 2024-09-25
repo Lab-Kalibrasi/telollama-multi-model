@@ -31,13 +31,16 @@ Telollama is a Telegram bot that uses multiple AI models to create fun conversat
 
 ## How to Start
 
-1. Copy the project files:
+1. Clone the project repository:
    ```bash
    git clone https://github.com/ceroberoz/telollama-multi-model.git
    cd telollama-multi-model
    ```
 
-2. Make a `.env` file with your login details:
+2. Install Deno:
+   Follow the instructions at https://deno.land/#installation to install Deno for your operating system.
+
+3. Create a `.env` file in the project root with your credentials:
    ```env
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
    OPENROUTER_API_KEY=your_openrouter_api_key
@@ -48,10 +51,29 @@ Telollama is a Telegram bot that uses multiple AI models to create fun conversat
    YOUR_SITE_NAME=your_site_name
    ```
 
-3. Start the bot:
+4. Install project dependencies:
    ```bash
-   deno run -A --unstable-kv ./src/main.ts
+   deno cache ./src/main.ts
    ```
+
+5. Start the bot:
+   ```bash
+   deno run --allow-net --allow-env --allow-read ./src/main.ts
+   ```
+
+   Note: The `--allow-net`, `--allow-env`, and `--allow-read` flags grant necessary permissions to the script. Adjust these as needed based on your security requirements.
+
+6. Your bot should now be running and responding to messages on Telegram.
+
+## Development
+
+To run the bot in development mode with file watching:
+
+```bash
+deno run --watch --allow-net --allow-env --allow-read ./src/main.ts
+```
+
+This will automatically restart the bot when you make changes to the source files.
 
 ## Cool Extras
 
@@ -72,7 +94,7 @@ Telollama is a Telegram bot that uses multiple AI models to create fun conversat
 
 ## Want to Help?
 
-Feel free to suggest changes or report problems!
+Feel free to suggest changes or report problems by opening an issue or submitting a pull request!
 
 ## License
 

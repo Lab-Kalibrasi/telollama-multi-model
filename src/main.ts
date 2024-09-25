@@ -1,8 +1,10 @@
 import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts";
 import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
 import { useDB, Message } from './utils/db.ts';
-import "https://deno.land/std@0.177.0/dotenv/load.ts";
+import { load } from "https://deno.land/std@0.177.0/dotenv/mod.ts";
 import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "https://esm.sh/@google/generative-ai@0.19.0";
+
+await load({ export: true });
 
 const apiKeys = [
   Deno.env.get("OPENROUTER_API_KEY") || "",
@@ -441,7 +443,7 @@ async function generateResponse(chatId: number, userMessage: string): Promise<st
 
   response = postProcessResponse(response);
 
-  return response;
+  return response as string;
 }
 
 function postProcessResponse(response: string): string {
