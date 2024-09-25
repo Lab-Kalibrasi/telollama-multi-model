@@ -96,8 +96,6 @@ const { getMessages, saveMessages } = useDB({
 });
 
 const models = [
-  "gryphe/mythomist-7b:free",
-  "nousresearch/nous-hermes-llama2-13b:free",
   "google/gemma-7b-it:free",
   "meta-llama/llama-2-13b-chat:free",
   "mistralai/mistral-7b-instruct:free",
