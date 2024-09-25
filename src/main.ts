@@ -76,7 +76,6 @@ const { getMessages, saveMessages } = useDB({
 const models = [
   "nousresearch/hermes-3-llama-3.1-405b:free",
   "meta-llama/llama-3-8b-instruct:free",
-  "google/gemma-2-9b-it:free",
   "google/gemini-pro",
 ];
 
