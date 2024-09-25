@@ -2,7 +2,7 @@ import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts"
 import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
 import { useDB } from './utils/db.ts';
 import "https://deno.land/std@0.177.0/dotenv/load.ts";
-import { GoogleGenerativeAI } from "@google-ai/generativelanguage";
+import { GoogleGenerativeAI } from "https://esm.sh/@google-ai/generativelanguage@0.2.1";
 
 const personalityTraits = [
   "Fiercely competitive",
