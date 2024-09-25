@@ -1,4 +1,4 @@
-import { type Config, createClient } from '@libsql/client/node'
+import { type Config, createClient } from '@libsql/client/web'
 import { defu } from 'defu'
 import type { OllamaMessage } from './types.ts'
 

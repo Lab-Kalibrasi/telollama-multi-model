@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-read --allow-write --allow-env --allow-ffi --allow-net src/main.ts"
+    "dev": "deno run --allow-net --allow-env --allow-read main.ts"
   },
   "fmt": {
     "indentWidth": 2,
@@ -12,5 +12,13 @@
     "@libsql/client": "npm:@libsql/client@^0.14.0",
     "defu": "npm:defu@^6.1.4",
     "grammy": "https://deno.land/x/grammy@v1.30.0/mod.ts"
+  },
+  "deploy": {
+    "project": "8db178df-e217-47ed-816f-507812ba46b6",
+    "exclude": [
+      "**/node_modules"
+    ],
+    "include": [],
+    "entrypoint": "src/main.ts"
   }
 }

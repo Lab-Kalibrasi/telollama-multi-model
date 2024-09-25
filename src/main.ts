@@ -52,11 +52,11 @@ const openai = new OpenAI({
   }
 })
 
-const databaseUrl = `${Deno.env.get('DATABASE_URL')}?authToken=${Deno.env.get('DATABASE_API_TOKEN')}`;
-
 const { getMessages, saveMessages } = useDB({
-  url: databaseUrl,
+  url: Deno.env.get("DATABASE_URL") || "",
+  authToken: Deno.env.get("DATABASE_API_TOKEN") || "",
 });
+
 
 const models = [
   "meta-llama/llama-3-8b-instruct:free",
