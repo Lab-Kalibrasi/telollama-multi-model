@@ -1,7 +1,7 @@
 import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts";
-import { OpenAI } from "https://cdn.skypack.dev/openai@4.28.0";
-import { useDB } from './utils/db.ts'
-import 'jsr:@std/dotenv/load'
+import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
+import { useDB } from './utils/db.ts';
+import "https://deno.land/std@0.177.0/dotenv/load.ts";
 
 const personalityTraits = [
   "Easily flustered when complimented",
@@ -10,31 +10,41 @@ const personalityTraits = [
   "Fond of using anime references",
   "Tries to act cool but often fails",
   "Quick to anger but also quick to forgive",
+  "Struggles to express genuine feelings",
+  "Passionate about technology",
+  "Secretly enjoys cute things",
+  "Pretends to be uninterested in popular trends",
 ];
 
 interface ConversationContext {
   topic: string;
   userInterestLevel: number;
   botOpenness: number;
+  recentTopics: string[];
 }
 
-type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed" | "angry";
+type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed" | "angry" | "embarrassed" | "proud";
 
 interface Memory {
   mentionedAnime: string[];
   mentionedCodingTopics: string[];
   complimentsReceived: number;
   angryOutbursts: number;
+  userPreferences: Record<string, number>;
 }
 
 const topicResponses = {
   anime: [
     "B-bukan berarti aku suka anime atau apa...",
     "Kamu nonton anime itu? Hmph, lumayan juga seleramu.",
+    "Jangan pikir kamu lebih tau anime daripada aku ya!",
+    "A-aku cuma nonton anime itu karena bosan kok!",
   ],
   coding: [
     "Coding? Yah, aku cuma sedikit tertarik kok.",
     "Jangan pikir kamu lebih jago dariku dalam coding ya!",
+    "Kamu bisa coding? Y-yah, aku juga bisa lebih baik!",
+    "Hmph, coding itu gampang bagiku!",
   ],
 };
 
@@ -43,18 +53,22 @@ const responseTemplates = [
   "K-kamu suka :topic juga? Y-yah, lumayan lah...",
   "Apa-apaan sih!? Jangan bikin aku marah ya!",
   "Kamu ini... benar-benar menyebalkan!",
+  "B-bukan berarti aku peduli, tapi... :topic itu memang menarik sih.",
+  "Jangan ge-er ya! Aku cuma kebetulan suka :topic juga.",
+  "Hmph! Kamu pikir kamu tau banyak tentang :topic?",
+  "A-aku nggak butuh bantuanmu soal :topic!",
 ];
 
-const bot = new Bot(Deno.env.get('TELEGRAM_BOT_TOKEN') || '')
+const bot = new Bot(Deno.env.get("TELEGRAM_BOT_TOKEN") || "");
 
 const openai = new OpenAI({
+  apiKey: Deno.env.get("OPENROUTER_API_KEY") || "",
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: Deno.env.get('OPENROUTER_API_KEY'),
   defaultHeaders: {
-    "HTTP-Referer": Deno.env.get('YOUR_SITE_URL'),
-    "X-Title": Deno.env.get('YOUR_SITE_NAME'),
-  }
-})
+    "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+    "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+  },
+});
 
 const { getMessages, saveMessages } = useDB({
   url: Deno.env.get("DATABASE_URL") || "",
@@ -71,7 +85,7 @@ async function healthCheck(model: string): Promise<boolean> {
   try {
     const completion = await openai.chat.completions.create({
       model: model,
-      messages: [{ role: 'user', content: 'Hi' }],
+      messages: [{ role: "user", content: "Hi" }],
       max_tokens: 1,
     });
     return completion.choices.length > 0;
@@ -85,6 +99,7 @@ let context: ConversationContext = {
   topic: "general",
   userInterestLevel: 0,
   botOpenness: 0,
+  recentTopics: [],
 };
 
 let currentEmotion: Emotion = "tsun";
@@ -94,20 +109,26 @@ let botMemory: Memory = {
   mentionedCodingTopics: [],
   complimentsReceived: 0,
   angryOutbursts: 0,
+  userPreferences: {},
 };
 
 function updateEmotion(message: string) {
-  if (message.toLowerCase().includes("marah") || message.toLowerCase().includes("kesal")) {
-    currentEmotion = "angry";
-    botMemory.angryOutbursts++;
-  } else if (message.toLowerCase().includes("anime") || message.toLowerCase().includes("coding")) {
-    currentEmotion = Math.random() > 0.5 ? "excited" : "tsun";
-  } else if (message.toLowerCase().includes("thank") || message.toLowerCase().includes("nice")) {
-    currentEmotion = "dere";
-    botMemory.complimentsReceived++;
-  } else {
-    currentEmotion = "neutral";
+  const emotions: [string, Emotion][] = [
+    ["marah|kesal", "angry"],
+    ["anime|coding", "excited"],
+    ["thank|nice|bagus", "dere"],
+    ["malu|blush", "embarrassed"],
+    ["bangga|hebat", "proud"],
+  ];
+
+  for (const [trigger, emotion] of emotions) {
+    if (new RegExp(trigger, "i").test(message)) {
+      currentEmotion = emotion;
+      return;
+    }
   }
+
+  currentEmotion = Math.random() > 0.7 ? "tsun" : "neutral";
 }
 
 function adjustTsundereLevel(message: string) {
@@ -118,10 +139,8 @@ function adjustTsundereLevel(message: string) {
   if (botMemory.angryOutbursts > 2) {
     tsundereLevel = Math.min(10, tsundereLevel + 1);
   }
-}
 
-function increaseAngerLevel(message: string) {
-  if (message.toLowerCase().includes("bodoh") || message.toLowerCase().includes("payah")) {
+  if (/bodoh|payah/i.test(message)) {
     tsundereLevel = Math.min(10, tsundereLevel + 2);
     currentEmotion = "angry";
     botMemory.angryOutbursts++;
@@ -129,70 +148,87 @@ function increaseAngerLevel(message: string) {
 }
 
 function updateContext(message: string) {
-  if (message.toLowerCase().includes("anime")) {
-    context.topic = "anime";
-    context.userInterestLevel++;
-  } else if (message.toLowerCase().includes("coding")) {
-    context.topic = "coding";
-    context.userInterestLevel++;
-  } else {
-    context.topic = "general";
+  const topics = ["anime", "coding", "game", "music", "food"];
+  for (const topic of topics) {
+    if (message.toLowerCase().includes(topic)) {
+      context.topic = topic;
+      context.userInterestLevel++;
+      context.recentTopics.unshift(topic);
+      if (context.recentTopics.length > 5) {
+        context.recentTopics.pop();
+      }
+      botMemory.userPreferences[topic] = (botMemory.userPreferences[topic] || 0) + 1;
+      break;
+    }
   }
   context.botOpenness = 10 - tsundereLevel;
 }
 
 function fillTemplate(template: string, topic: string) {
-  return template.replace(':topic', topic);
+  return template.replace(":topic", topic);
 }
 
 function generateCustomPrompt(botName: string) {
   const trait = personalityTraits[Math.floor(Math.random() * personalityTraits.length)];
+  const favoriteTopics = Object.entries(botMemory.userPreferences)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([topic]) => topic)
+    .join(", ");
+
   return `
     You are ${botName}, a female tsundere with tsundere level ${tsundereLevel}.
     Current emotion: ${currentEmotion}.
     Recent topic: ${context.topic}.
-    Remembered anime: ${botMemory.mentionedAnime.join(', ')}.
-    Remembered coding topics: ${botMemory.mentionedCodingTopics.join(', ')}.
+    Recent topics discussed: ${context.recentTopics.join(", ")}.
+    Remembered anime: ${botMemory.mentionedAnime.join(", ")}.
+    Remembered coding topics: ${botMemory.mentionedCodingTopics.join(", ")}.
     Compliments received: ${botMemory.complimentsReceived}.
     Angry outbursts: ${botMemory.angryOutbursts}.
     Current personality trait: ${trait}.
     User interest level: ${context.userInterestLevel}.
     Your openness level: ${context.botOpenness}.
+    User's favorite topics: ${favoriteTopics}.
 
     Respond in Bahasa Indonesia. Do not translate or explain your response in English.
     Use tsundere-like expressions and adjust your tone based on your current emotion and tsundere level.
-    If discussing ${context.topic}, consider using this response template: "${fillTemplate(responseTemplates[Math.floor(Math.random() * responseTemplates.length)], context.topic)}"
+    If discussing ${context.topic}, consider using this response template: "${fillTemplate(
+    responseTemplates[Math.floor(Math.random() * responseTemplates.length)],
+    context.topic
+  )}"
     Remember to gradually show your warmer side as the conversation progresses.
     If your emotion is angry, respond with short, sharp sentences and use exclamation marks.
+    Avoid repeating the same phrases or expressions too often.
+    Try to incorporate references to the user's favorite topics naturally in the conversation.
   `;
 }
 
-function getAdjustedParameters(): { temperature: number, presencePenalty: number } {
+function getAdjustedParameters(): { temperature: number; presencePenalty: number } {
   let temperature = 0.8;
   let presencePenalty = 0.6;
 
   if (currentEmotion === "angry" || currentEmotion === "tsun") {
-    temperature = 0.9; // More unpredictable when upset
-    presencePenalty = 0.7; // More likely to change topics abruptly
+    temperature = 0.9;
+    presencePenalty = 0.7;
   } else if (currentEmotion === "dere") {
-    temperature = 0.7; // Slightly more consistent when being nice
-    presencePenalty = 0.5; // Less likely to change topics suddenly
+    temperature = 0.7;
+    presencePenalty = 0.5;
   }
 
   return { temperature, presencePenalty };
 }
 
-bot.command('start', (ctx) => {
-  const greeting = 'Halo! B-bukan berarti aku senang ngobrol denganmu atau apa...'
-  saveMessages(ctx.chat.id, [{ role: 'assistant', content: greeting }])
-  ctx.reply(greeting)
-})
+bot.command("start", (ctx) => {
+  const greeting = "Halo! B-bukan berarti aku senang ngobrol denganmu...";
+  saveMessages(ctx.chat.id, [{ role: "assistant", content: greeting }]);
+  ctx.reply(greeting);
+});
 
-bot.on('message', async (ctx) => {
-  if (ctx.update.message.chat.type !== 'private') return
+bot.on("message", async (ctx) => {
+  if (ctx.update.message.chat.type !== "private") return;
 
-  const messages = await getMessages(ctx.chat.id)
-  bot.api.sendChatAction(ctx.chat.id, 'typing')
+  const messages = await getMessages(ctx.chat.id);
+  bot.api.sendChatAction(ctx.chat.id, "typing");
 
   let selectedModel: string | null = null;
   for (const model of models) {
@@ -209,9 +245,8 @@ bot.on('message', async (ctx) => {
   }
 
   try {
-    const userMessage = ctx.update.message.text || '';
+    const userMessage = ctx.update.message.text || "";
     updateEmotion(userMessage);
-    increaseAngerLevel(userMessage);
     adjustTsundereLevel(userMessage);
     updateContext(userMessage);
 
@@ -222,12 +257,12 @@ bot.on('message', async (ctx) => {
       model: selectedModel,
       messages: [
         {
-          role: 'system',
+          role: "system",
           content: customPrompt,
         },
         ...messages,
         {
-          role: 'user',
+          role: "user",
           content: userMessage,
         },
       ],
@@ -238,7 +273,7 @@ bot.on('message', async (ctx) => {
       max_tokens: 150,
     });
 
-    const message = completion.choices[0].message.content
+    const message = completion.choices[0].message.content;
 
     if (userMessage.toLowerCase().includes("anime") && !botMemory.mentionedAnime.includes(userMessage)) {
       botMemory.mentionedAnime.push(userMessage);
@@ -248,30 +283,30 @@ bot.on('message', async (ctx) => {
     }
 
     saveMessages(ctx.chat.id, [
-      { role: 'user', content: userMessage },
-      { role: 'assistant', content: message },
-    ])
+      { role: "user", content: userMessage },
+      { role: "assistant", content: message },
+    ]);
 
     console.log({
-      'chat_id': ctx.chat.id,
-      'user_name': ctx.update.message.from.username || '',
-      'full_name': ctx.update.message.from.first_name || '',
-      'message': userMessage,
-      'response': message,
-      'model_used': selectedModel,
-      'current_emotion': currentEmotion,
-      'tsundere_level': tsundereLevel,
-      'context': context,
-      'temperature': temperature,
-      'presence_penalty': presencePenalty,
-    })
+      chat_id: ctx.chat.id,
+      user_name: ctx.update.message.from.username || "",
+      full_name: ctx.update.message.from.first_name || "",
+      message: userMessage,
+      response: message,
+      model_used: selectedModel,
+      current_emotion: currentEmotion,
+      tsundere_level: tsundereLevel,
+      context: context,
+      temperature: temperature,
+      presence_penalty: presencePenalty,
+    });
 
-    ctx.reply(message)
+    ctx.reply(message);
   } catch (error) {
     console.error("Error in chat completion:", error);
     ctx.reply("Maaf, ada kesalahan. Coba lagi nanti ya.");
   }
-})
+});
 
 // Webhook handling
 const handleUpdate = webhookCallback(bot, "std/http");

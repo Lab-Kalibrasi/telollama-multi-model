@@ -16,6 +16,10 @@ Telollama is an engaging Telegram bot project built with [Deno](https://deno.lan
 - 💾 **Enhanced Memory System**: Remembers key points from earlier in the conversation, including compliments, angry outbursts, and mentioned topics.
 - 🇮🇩 **Bahasa Indonesia**: Responds in Bahasa Indonesia, catering to Indonesian users.
 - 🎛️ **Dynamic Parameter Adjustment**: Automatically adjusts language model parameters based on the bot's current emotional state.
+- 🔄 **Adaptive Conversation Flow**: Implements a system to track recent topics and user preferences for more engaging dialogues.
+- 🎨 **Expanded Personality Traits**: Incorporates a wider range of personality traits for more diverse interactions.
+- 📝 **Varied Response Templates**: Utilizes an expanded set of response templates to reduce repetition.
+- 👤 **User Preference Tracking**: Keeps track of user's favorite topics to tailor conversations accordingly.
 
 ## Installation
 
@@ -45,41 +49,44 @@ Telollama is an engaging Telegram bot project built with [Deno](https://deno.lan
 4. Start the bot in development mode:
 
    ```bash
-   deno run -A --unstable-kv ./src/main.ts
+   deno run ./src/main.ts
    ```
 
-   ## Usage
+## Usage
 
-   Start a chat with the bot on Telegram. The bot will respond with a female tsundere personality, dynamically adjusting its behavior based on the conversation context and its emotional state. It can discuss various topics, with a particular interest in anime and coding. The bot's responses will vary in unpredictability and topic consistency depending on whether it's in a "tsun" (more erratic) or "dere" (more consistent) state.
+Start a chat with the bot on Telegram. The bot will respond with a female tsundere personality, dynamically adjusting its behavior based on the conversation context, its emotional state, and the user's preferences. It can discuss various topics, with a particular interest in anime and coding. The bot's responses will vary in unpredictability and topic consistency depending on its current emotional state and the conversation flow.
 
-   ## AI Models
+## AI Models
 
-   The bot uses the following models through OpenRouter:
+The bot uses the following models through OpenRouter:
 
-   - Meta's Llama (llama-3-8b-instruct)
-   - Mistral AI (mistral-7b-instruct)
-   - Google's Gemma (gemma-2-9b-it)
+- Meta's Llama (llama-3-8b-instruct)
+- Mistral AI (mistral-7b-instruct)
+- Google's Gemma (gemma-2-9b-it)
 
-   The bot automatically selects an available model for each interaction and adjusts parameters like temperature and presence penalty based on its current emotional state.
+The bot automatically selects an available model for each interaction and adjusts parameters like temperature and presence penalty based on its current emotional state.
 
-   ## Technologies Used
+## Technologies Used
 
-   - [Deno](https://deno.land/) - A modern runtime for JavaScript and TypeScript
-   - [Telegram Bot API](https://core.telegram.org/bots/api) - For creating the bot
-   - [OpenRouter](https://openrouter.ai/) - For accessing various AI models
-   - [Turso](https://turso.tech/) - For database storage
+- [Deno](https://deno.land/) - A modern runtime for JavaScript and TypeScript
+- [Telegram Bot API](https://core.telegram.org/bots/api) - For creating the bot
+- [OpenRouter](https://openrouter.ai/) - For accessing various AI models
+- [Turso](https://turso.tech/) - For database storage
 
-   ## Advanced Features
+## Advanced Features
 
-   - **Dynamic Emotional Parameters**: The bot adjusts its language model parameters (temperature and presence penalty) based on its current emotional state, resulting in more varied and context-appropriate responses.
-   - **Personality Trait System**: Incorporates random personality traits into each interaction, adding depth to the bot's character.
-   - **Adaptive Tsundere Level**: The bot's tsundere level changes throughout the conversation, affecting its openness and response style.
-   - **Topic Memory**: Keeps track of mentioned anime and coding topics for more contextually relevant future interactions.
+- **Dynamic Emotional Parameters**: The bot adjusts its language model parameters (temperature and presence penalty) based on its current emotional state, resulting in more varied and context-appropriate responses.
+- **Expanded Personality Trait System**: Incorporates a wider range of personality traits into each interaction, adding depth and variety to the bot's character.
+- **Adaptive Tsundere Level**: The bot's tsundere level changes throughout the conversation, affecting its openness and response style.
+- **Enhanced Topic Memory**: Keeps track of mentioned anime, coding topics, and other subjects for more contextually relevant future interactions.
+- **User Preference Analysis**: Analyzes and remembers user's favorite topics to tailor future conversations and references.
+- **Conversation Flow Management**: Maintains a list of recent topics to ensure more natural and varied dialogue progression.
+- **Emotion Transition Refinement**: Implements a more nuanced system for transitioning between emotional states based on conversation cues.
 
-   ## Contributing
+## Contributing
 
-   Contributions are welcome! Feel free to submit a pull request or open an issue to improve Telollama.
+Contributions are welcome! Feel free to submit a pull request or open an issue to improve Telollama.
 
-   ## License
+## License
 
-   This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
