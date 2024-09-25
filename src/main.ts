@@ -96,9 +96,10 @@ const { getMessages, saveMessages } = useDB({
 });
 
 const models = [
-  "google/gemma-7b-it:free",
-  "meta-llama/llama-2-13b-chat:free",
-  "mistralai/mistral-7b-instruct:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "meta-llama/llama-3-8b-instruct:free",
+  "google/gemini-pro-1.5-exp",
+  "google/gemma-2-9b-it:free",
 ];
 
 async function healthCheck(model: string): Promise<boolean> {
