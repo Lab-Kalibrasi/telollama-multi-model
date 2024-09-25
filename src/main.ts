@@ -4,6 +4,12 @@ import { useDB, Message } from './utils/db.ts';
 import "https://deno.land/std@0.177.0/dotenv/load.ts";
 import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "https://esm.sh/@google/generative-ai@0.19.0";
 
+const apiKeys = [
+  Deno.env.get("OPENROUTER_API_KEY") || "",
+  Deno.env.get("OPENROUTER_API_KEY_A") || "",
+  Deno.env.get("OPENROUTER_API_KEY_B") || "",
+].filter(key => key !== "");
+
 const personalityTraits = [
   "Fiercely competitive",
   "Struggles with self-worth",
@@ -121,7 +127,15 @@ let botMemory: Memory = {
 };
 
 const modelAdapters = {
-  "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string) => {
+  "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+      },
+    });
     const completion = await openai.chat.completions.create({
       model: "nousresearch/hermes-3-llama-3.1-405b:free",
       messages: [
@@ -131,9 +145,17 @@ const modelAdapters = {
       temperature: 0.8,
       max_tokens: 150,
     });
-    return completion.choices[0].message.content;
+    return completion.choices[0].message.content || "";
   },
-  "meta-llama/llama-3-8b-instruct:free": async (messages: Message[], prompt: string) => {
+  "meta-llama/llama-3-8b-instruct:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+      },
+    });
     const completion = await openai.chat.completions.create({
       model: "meta-llama/llama-3-8b-instruct:free",
       messages: [
@@ -143,9 +165,9 @@ const modelAdapters = {
       temperature: 0.8,
       max_tokens: 150,
     });
-    return completion.choices[0].message.content;
+    return completion.choices[0].message.content || "";
   },
-  "google/gemini-pro": async (messages: Message[], prompt: string) => {
+  "google/gemini-pro": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
     const generativeModel = googleAI.getGenerativeModel({
       model: "gemini-pro",
       safetySettings: safetySettings
@@ -163,19 +185,28 @@ const modelAdapters = {
   },
 };
 
-async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
-  for (let i = 0; i < maxRetries; i++) {
+let currentKeyIndex = 0;
+
+function getNextApiKey(): string {
+  const key = apiKeys[currentKeyIndex];
+  currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+  return key;
+}
+
+async function retryWithBackoff<T>(fn: (apiKey: string) => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let i = 0; i < maxRetries * apiKeys.length; i++) {
     try {
-      return await fn();
+      const apiKey = getNextApiKey();
+      return await fn(apiKey);
     } catch (error) {
-      if (error.status === 429 && i < maxRetries - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+      if (error.status === 429 && i < maxRetries * apiKeys.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i % maxRetries)));
         continue;
       }
       throw error;
     }
   }
-  throw new Error("Max retries reached");
+  throw new Error("Max retries reached for all API keys");
 }
 
 async function healthCheck(model: string): Promise<boolean> {
@@ -184,8 +215,10 @@ async function healthCheck(model: string): Promise<boolean> {
     if (!adapter) {
       return false;
     }
-    const result = await retryWithBackoff(() => adapter([{ role: "user", content: "Hi" }], "You are an AI assistant."));
-    return result && result.length > 0;
+    const result = await retryWithBackoff((apiKey) =>
+      adapter([{ role: "user", content: "Hi" }], "You are an AI assistant.", apiKey)
+    );
+    return typeof result === 'string' && result.length > 0;
   } catch (error) {
     console.error(`Health check failed for model ${model}:`, error);
     return false;
@@ -382,7 +415,7 @@ async function summarizeConversation(messages: Message[]): Promise<string> {
   return messages[messages.length - 1]?.content || "";
 }
 
-async function generateResponse(chatId: number, userMessage: string) {
+async function generateResponse(chatId: number, userMessage: string): Promise<string> {
   const messages = await getMessages(chatId);
   const customPrompt = await generateCustomPrompt(chatId, bot.me.first_name, userMessage);
   const conversationSummary = await summarizeConversation(messages.slice(-10));
@@ -398,7 +431,13 @@ async function generateResponse(chatId: number, userMessage: string) {
   }
 
   const fullPrompt = `${customPrompt}\n\nConversation summary: ${conversationSummary}`;
-  let response = await adapter(messages.slice(-5), fullPrompt);
+  let response = await retryWithBackoff((apiKey) =>
+    adapter(messages.slice(-5), fullPrompt, apiKey)
+  );
+
+  if (typeof response !== 'string') {
+    throw new Error("Invalid response from model");
+  }
 
   response = postProcessResponse(response);
 
@@ -432,8 +471,8 @@ bot.on("message", async (ctx) => {
 
     const response = await generateResponse(ctx.chat.id, userMessage);
 
-    if (!response) {
-      throw new Error("No response generated");
+    if (typeof response !== 'string' || response.length === 0) {
+      throw new Error("No valid response generated");
     }
 
     if (userMessage.toLowerCase().includes("eva") && !botMemory.mentionedEva.includes(userMessage)) {
