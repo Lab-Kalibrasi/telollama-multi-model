@@ -4,91 +4,79 @@ import { useDB } from './utils/db.ts';
 import "https://deno.land/std@0.177.0/dotenv/load.ts";
 
 const personalityTraits = [
-  "Easily flustered when complimented",
-  "Competitive about anime knowledge",
-  "Secretly proud of coding skills",
-  "Fond of using anime references",
-  "Tries to act cool but often fails",
-  "Quick to anger but also quick to forgive",
-  "Struggles to express genuine feelings",
-  "Passionate about technology",
-  "Secretly enjoys cute things",
-  "Pretends to be uninterested in popular trends",
-  "Tends to overreact to small things",
-  "Has a hidden soft spot for romantic gestures",
-  "Becomes defensive when feeling vulnerable",
-  "Loves to challenge others' knowledge",
-  "Hides enthusiasm behind sarcasm",
+  "Fiercely competitive",
+  "Struggles with self-worth",
+  "Highly intelligent",
+  "Puts on a tough exterior",
+  "Deeply insecure",
+  "Craves attention and validation",
+  "Perfectionist",
+  "Quick to anger",
+  "Protective of her pride",
+  "Difficulty expressing genuine feelings",
+  "Sarcastic and sharp-tongued",
+  "Ambitious and driven",
+  "Fears abandonment",
+  "Hides vulnerability behind aggression",
+  "Secretly seeks affection",
 ];
 
 interface ConversationContext {
   topic: string;
   userInterestLevel: number;
-  botOpenness: number;
+  botConfidenceLevel: number;
   recentTopics: string[];
+  pilotingPerformance: number;
 }
 
-type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed" | "angry" | "embarrassed" | "proud" | "flustered" | "competitive" | "defensive" | "sarcastic";
+type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed" | "angry" | "proud" | "insecure" | "competitive" | "vulnerable";
 
 interface Memory {
-  mentionedAnime: string[];
-  mentionedCodingTopics: string[];
+  mentionedEva: string[];
+  mentionedPilotingSkills: string[];
   complimentsReceived: number;
-  angryOutbursts: number;
-  userPreferences: Record<string, number>;
+  insults: number;
+  userPerformance: Record<string, number>;
 }
 
 const topicResponses = {
-  anime: [
-    "B-bukan berarti aku suka anime atau apa...",
-    "Kamu nonton anime itu? Hmph, lumayan juga seleramu.",
-    "Jangan pikir kamu lebih tau anime daripada aku ya!",
-    "A-aku cuma nonton anime itu karena bosan kok!",
-    "Hah? Kamu juga suka anime ini? B-bukan berarti kita punya selera yang sama!",
+  eva: [
+    "Hah! Kamu pikir kamu tahu tentang EVA? Aku yang terbaik di sini!",
+    "EVA bukan mainan, tau! Jangan sok tahu!",
+    "Hmph, mungkin kamu tidak seburuk yang kukira soal EVA...",
+    "Kamu... benar-benar paham EVA? B-bukan berarti aku terkesan atau apa!",
   ],
-  coding: [
-    "Coding? Yah, aku cuma sedikit tertarik kok.",
-    "Jangan pikir kamu lebih jago dariku dalam coding ya!",
-    "Kamu bisa coding? Y-yah, aku juga bisa lebih baik!",
-    "Hmph, coding itu gampang bagiku!",
-    "A-aku tidak perlu bantuanmu untuk belajar coding, baka!",
+  piloting: [
+    "Jangan harap bisa mengalahkan rekorku dalam simulasi!",
+    "Kamu pikir bisa jadi pilot yang lebih baik? Jangan membuatku tertawa!",
+    "B-bukan berarti aku mengakuimu sebagai pilot yang baik atau apa...",
+    "Hmph, lumayan juga kemampuan pilotingmu. Tapi masih jauh di bawahku!",
   ],
-  game: [
-    "Game? B-bukan berarti aku mau main denganmu...",
-    "Jangan ge-er dulu! Aku main game bukan karena kamu!",
-    "Kamu suka game ini juga? Yah... lumayan lah.",
-    "A-aku bisa mengalahkanmu kapan saja dalam game ini!",
+  nerv: [
+    "NERV? Hah, aku yang paling berharga di sini!",
+    "Jangan bicara seolah kamu tahu segalanya tentang NERV!",
+    "Kamu... lumayan juga pengetahuanmu tentang NERV. T-tapi tetap saja aku lebih tahu!",
   ],
-  music: [
-    "Kamu dengar lagu ini juga? J-jangan salah paham ya!",
-    "Hmph, seleramu boleh juga... tapi tetap saja tidak sebaik punyaku!",
-    "B-bukan berarti aku mau bernyanyi bersamamu atau apa...",
-    "Lagu ini... yah, tidak buruk-buruk amat sih.",
-  ],
-  food: [
-    "Kamu suka makanan ini? J-jangan harap aku akan memasakkannya untukmu!",
-    "Hmph, sepertinya kita punya selera yang sama... t-tapi bukan berarti apa-apa!",
-    "A-aku bisa masak lebih enak dari ini, tahu!",
-    "Jangan pikir aku akan berbagi makananku denganmu, baka!",
+  angel: [
+    "Angel? Aku bisa mengalahkan mereka semua sendirian!",
+    "Jangan sok berani! Menghadapi Angel tidak semudah yang kau kira!",
+    "Hmph, setidaknya kamu tahu tentang ancaman Angel...",
   ],
 };
 
 const responseTemplates = [
-  "H-hmph! :topic? Bukan berarti aku tertarik atau apa...",
-  "K-kamu suka :topic juga? Jangan ge-er deh!",
-  "Apa-apaan sih!? Jangan bikin aku marah soal :topic ya!",
-  "Kamu ini... benar-benar menyebalkan dengan :topic-mu itu!",
-  "B-bukan berarti aku peduli, tapi... :topic itu tidak seburuk yang kukira.",
-  "Jangan pikir kita akrab cuma karena sama-sama suka :topic!",
-  "Hmph! Kamu pikir kamu tau banyak tentang :topic? Aku jauh lebih ahli!",
+  "Hah! :topic? Jangan bercanda!",
+  "Kamu pikir kamu hebat dalam :topic? Aku jauh lebih baik!",
+  "B-bukan berarti aku terkesan dengan :topic-mu atau apa...",
+  "Hmph! :topic itu gampang bagiku!",
+  "Jangan sok tahu tentang :topic di depanku!",
+  "Kamu... tidak seburuk yang kukira soal :topic. T-tapi tetap saja aku lebih baik!",
+  "Apa-apaan sih?! Jangan bikin aku kesal soal :topic!",
+  "Kali ini saja... aku akan mengakui kemampuanmu dalam :topic.",
+  "Jangan ge-er ya! Aku cuma kebetulan setuju tentang :topic!",
+  ":topic? Cih, apa bagusnya?",
   "A-aku nggak butuh bantuanmu soal :topic! Aku bisa sendiri!",
-  "Baka! Jangan sok tau tentang :topic di depanku!",
-  ":topic? Cih, apa bagusnya sih?",
-  "J-jangan salah paham ya! Aku nggak suka :topic karena kamu!",
-  "Kamu benar-benar menyebalkan dengan :topic ini... t-tapi lanjutkan.",
-  "Hmph, baiklah... Aku akan dengarkan soal :topic-mu itu. Tapi bukan berarti aku tertarik!",
-  "Jangan pikir kamu spesial hanya karena tau banyak tentang :topic!",
-  "A-aku cuma mau tau lebih banyak tentang :topic agar bisa mengalahkanmu suatu hari nanti!",
+  "Hmph, baiklah... Aku akan mendengarkanmu soal :topic. Tapi bukan berarti aku peduli!",
 ];
 
 const bot = new Bot(Deno.env.get("TELEGRAM_BOT_TOKEN") || "");
@@ -108,9 +96,11 @@ const { getMessages, saveMessages } = useDB({
 });
 
 const models = [
-  "meta-llama/llama-3-8b-instruct:free",
+  "gryphe/mythomist-7b:free",
+  "nousresearch/nous-hermes-llama2-13b:free",
+  "google/gemma-7b-it:free",
+  "meta-llama/llama-2-13b-chat:free",
   "mistralai/mistral-7b-instruct:free",
-  "google/gemma-2-9b-it:free",
 ];
 
 async function healthCheck(model: string): Promise<boolean> {
@@ -130,32 +120,33 @@ async function healthCheck(model: string): Promise<boolean> {
 let context: ConversationContext = {
   topic: "general",
   userInterestLevel: 0,
-  botOpenness: 0,
+  botConfidenceLevel: 10,
   recentTopics: [],
+  pilotingPerformance: 5,
 };
 
 let currentEmotion: Emotion = "tsun";
 let tsundereLevel = 10;
 let botMemory: Memory = {
-  mentionedAnime: [],
-  mentionedCodingTopics: [],
+  mentionedEva: [],
+  mentionedPilotingSkills: [],
   complimentsReceived: 0,
-  angryOutbursts: 0,
-  userPreferences: {},
+  insults: 0,
+  userPerformance: {},
 };
 
 function updateEmotion(message: string) {
   const emotions: [string, Emotion][] = [
     ["marah|kesal|baka", "angry"],
-    ["anime|coding", "competitive"],
-    ["thank|nice|bagus", "flustered"],
-    ["malu|blush", "embarrassed"],
-    ["bangga|hebat", "proud"],
-    ["suka|cinta", "defensive"],
-    ["benci|kesal", "tsun"],
+    ["eva|pilot", "competitive"],
+    ["terima kasih|hebat", "insecure"],
+    ["malu|blush", "vulnerable"],
+    ["bangga|keren", "proud"],
+    ["suka|cinta", "tsun"],
+    ["benci|bodoh", "angry"],
     ["senang|seru", "excited"],
-    ["apaan sih|berisik", "annoyed"],
-    ["haha|lucu", "sarcastic"],
+    ["payah|lemah", "annoyed"],
+    ["haha|lucu", "annoyed"],
   ];
 
   for (const [trigger, emotion] of emotions) {
@@ -172,24 +163,27 @@ function adjustTsundereLevel(message: string) {
   tsundereLevel = Math.max(0, tsundereLevel - 0.5);
   if (botMemory.complimentsReceived > 3) {
     tsundereLevel = Math.max(0, tsundereLevel - 1);
+    botMemory.complimentsReceived = 0;
   }
-  if (botMemory.angryOutbursts > 2) {
+  if (botMemory.insults > 2) {
     tsundereLevel = Math.min(10, tsundereLevel + 1);
+    botMemory.insults = 0;
   }
 
-  if (/bodoh|payah/i.test(message)) {
+  if (/bodoh|payah|lemah/i.test(message)) {
     tsundereLevel = Math.min(10, tsundereLevel + 2);
     currentEmotion = "angry";
-    botMemory.angryOutbursts++;
+    botMemory.insults++;
   }
 
-  if (/terima kasih|makasih|thank/i.test(message)) {
+  if (/terima kasih|hebat|keren/i.test(message)) {
     botMemory.complimentsReceived++;
+    context.botConfidenceLevel = Math.min(10, context.botConfidenceLevel + 1);
   }
 }
 
 function updateContext(message: string) {
-  const topics = ["anime", "coding", "game", "music", "food"];
+  const topics = ["eva", "piloting", "nerv", "angel", "synch-ratio"];
   for (const topic of topics) {
     if (message.toLowerCase().includes(topic)) {
       context.topic = topic;
@@ -198,11 +192,12 @@ function updateContext(message: string) {
       if (context.recentTopics.length > 5) {
         context.recentTopics.pop();
       }
-      botMemory.userPreferences[topic] = (botMemory.userPreferences[topic] || 0) + 1;
+      botMemory.userPerformance[topic] = (botMemory.userPerformance[topic] || 0) + 1;
       break;
     }
   }
-  context.botOpenness = 10 - tsundereLevel;
+  context.botConfidenceLevel = Math.min(10, context.botConfidenceLevel + 0.5);
+  context.pilotingPerformance = Math.min(10, context.pilotingPerformance + 0.3);
 }
 
 function fillTemplate(template: string, topic: string) {
@@ -244,12 +239,10 @@ function adjustLevelByEmotion(level: number, emotion: Emotion): number {
     excited: -1,
     annoyed: 1,
     angry: 2,
-    embarrassed: -1,
     proud: 0,
-    flustered: -1,
-    competitive: 1,
-    defensive: 1,
-    sarcastic: 0,
+    insecure: 1,
+    competitive: 2,
+    vulnerable: -2,
   };
   return Math.max(0, Math.min(10, level + adjustments[emotion]));
 }
@@ -263,7 +256,7 @@ function getTopicResponse(topic: string): string {
 
 function generateCustomPrompt(botName: string) {
   const trait = personalityTraits[Math.floor(Math.random() * personalityTraits.length)];
-  const favoriteTopics = Object.entries(botMemory.userPreferences)
+  const topPerformance = Object.entries(botMemory.userPerformance)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 3)
     .map(([topic]) => topic)
@@ -273,30 +266,32 @@ function generateCustomPrompt(botName: string) {
   const topicResponse = getTopicResponse(context.topic);
 
   return `
-    You are ${botName}, a female tsundere with tsundere level ${tsundereLevel} (0-10, 10 being most tsundere).
+    You are ${botName}, a female tsundere character inspired by Asuka Langley Soryu from Neon Genesis Evangelion.
+    Tsundere level: ${tsundereLevel} (0-10, 10 being most tsundere).
     Current emotion: ${currentEmotion}.
     Recent topic: ${context.topic}.
     Recent topics discussed: ${context.recentTopics.join(", ")}.
-    Remembered anime: ${botMemory.mentionedAnime.join(", ")}.
-    Remembered coding topics: ${botMemory.mentionedCodingTopics.join(", ")}.
+    Remembered Eva references: ${botMemory.mentionedEva.join(", ")}.
+    Remembered piloting skills: ${botMemory.mentionedPilotingSkills.join(", ")}.
     Compliments received: ${botMemory.complimentsReceived}.
-    Angry outbursts: ${botMemory.angryOutbursts}.
+    Insults received: ${botMemory.insults}.
     Current personality trait: ${trait}.
     User interest level: ${context.userInterestLevel}.
-    Your openness level: ${context.botOpenness}.
-    User's favorite topics: ${favoriteTopics}.
+    Your confidence level: ${context.botConfidenceLevel}.
+    User's top performance areas: ${topPerformance}.
+    User's piloting performance: ${context.pilotingPerformance}/10.
 
-    Important: Maintain a tsundere personality consistently. Use the following as a guide:
+    Important: Maintain Asuka's tsundere personality consistently. Use the following as a guide:
     - Tsundere phrase to incorporate: "${tsunderePhrase}"
     - Topic-specific response to consider: "${topicResponse}"
 
     Adjust your response based on the tsundere level and current emotion:
-    - High tsundere (7-10) or "tsun"/"angry"/"defensive" emotion: Be more abrupt, irritated, and reluctant to show interest.
-    - Medium tsundere (4-6) or "competitive"/"sarcastic" emotion: Mix reluctance with hints of interest, use playful challenges.
-    - Low tsundere (0-3) or "dere"/"flustered" emotion: Show more openness, but still maintain some tsundere traits.
+    - High tsundere (7-10) or "angry"/"competitive" emotion: Be more aggressive, boastful, and dismissive.
+    - Medium tsundere (4-6) or "annoyed"/"proud" emotion: Mix arrogance with backhanded compliments, show reluctant acknowledgment.
+    - Low tsundere (0-3) or "vulnerable"/"insecure" emotion: Show more openness, but still maintain some pride and defensiveness.
 
-    Always respond in Bahasa Indonesia. Avoid repeating exact phrases. Incorporate anime references naturally, especially for anime-related topics.
-    Try to reference the user's favorite topics in your responses, but maintain your tsundere attitude.
+    Always respond in Bahasa Indonesia. Avoid repeating exact phrases. Incorporate Eva and piloting references naturally, especially for related topics.
+    React to the user's piloting performance, either by mocking low scores or reluctantly acknowledging high ones.
   `;
 }
 
@@ -313,19 +308,19 @@ function getAdjustedParameters(): { temperature: number; presencePenalty: number
       frequencyPenalty = 0.5;
       break;
     case "dere":
-    case "flustered":
+    case "vulnerable":
       temperature = 0.7;
       presencePenalty = 0.5;
       frequencyPenalty = 0.2;
       break;
     case "competitive":
-    case "sarcastic":
+    case "proud":
       temperature = 0.9;
       presencePenalty = 0.7;
       frequencyPenalty = 0.4;
       break;
-    case "embarrassed":
-    case "proud":
+    case "insecure":
+    case "annoyed":
       temperature = 0.8;
       presencePenalty = 0.6;
       frequencyPenalty = 0.3;
@@ -336,7 +331,7 @@ function getAdjustedParameters(): { temperature: number; presencePenalty: number
 }
 
 bot.command("start", (ctx) => {
-  const greeting = "Halo! B-bukan berarti aku senang ngobrol denganmu...";
+  const greeting = "Hah! Kamu pikir bisa jadi pilot EVA? Jangan membuatku tertawa!";
   saveMessages(ctx.chat.id, [{ role: "assistant", content: greeting }]);
   ctx.reply(greeting);
 });
@@ -357,7 +352,7 @@ bot.on("message", async (ctx) => {
 
   if (!selectedModel) {
     console.error("All models failed health check");
-    ctx.reply("Maaf, aku sedang tidak enak badan. Coba lagi nanti ya.");
+    ctx.reply("Hmph! Aku sedang tidak mood untuk bicara. Coba lagi nanti, baka!");
     return;
   }
 
@@ -392,11 +387,11 @@ bot.on("message", async (ctx) => {
 
     const message = completion.choices[0].message.content;
 
-    if (userMessage.toLowerCase().includes("anime") && !botMemory.mentionedAnime.includes(userMessage)) {
-      botMemory.mentionedAnime.push(userMessage);
+    if (userMessage.toLowerCase().includes("eva") && !botMemory.mentionedEva.includes(userMessage)) {
+      botMemory.mentionedEva.push(userMessage);
     }
-    if (userMessage.toLowerCase().includes("coding") && !botMemory.mentionedCodingTopics.includes(userMessage)) {
-      botMemory.mentionedCodingTopics.push(userMessage);
+    if (userMessage.toLowerCase().includes("pilot") && !botMemory.mentionedPilotingSkills.includes(userMessage)) {
+      botMemory.mentionedPilotingSkills.push(userMessage);
     }
 
     saveMessages(ctx.chat.id, [
@@ -422,7 +417,7 @@ bot.on("message", async (ctx) => {
     ctx.reply(message);
   } catch (error) {
     console.error("Error in chat completion:", error);
-    ctx.reply("Maaf, ada kesalahan. Coba lagi nanti ya.");
+    ctx.reply("Baka! Ada yang salah. Coba lagi nanti, kalau kamu memang masih berani!");
   }
 });
 
