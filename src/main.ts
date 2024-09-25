@@ -50,13 +50,15 @@ const topicResponses = {
 
 const responseTemplates = [
   "H-hmph! :topic? Bukan berarti aku tertarik atau apa...",
-  "K-kamu suka :topic juga? Y-yah, lumayan lah...",
-  "Apa-apaan sih!? Jangan bikin aku marah ya!",
-  "Kamu ini... benar-benar menyebalkan!",
-  "B-bukan berarti aku peduli, tapi... :topic itu memang menarik sih.",
-  "Jangan ge-er ya! Aku cuma kebetulan suka :topic juga.",
-  "Hmph! Kamu pikir kamu tau banyak tentang :topic?",
-  "A-aku nggak butuh bantuanmu soal :topic!",
+  "K-kamu suka :topic juga? Jangan ge-er deh!",
+  "Apa-apaan sih!? Jangan bikin aku marah soal :topic ya!",
+  "Kamu ini... benar-benar menyebalkan dengan :topic-mu itu!",
+  "B-bukan berarti aku peduli, tapi... :topic itu tidak seburuk yang kukira.",
+  "Jangan pikir kita akrab cuma karena sama-sama suka :topic!",
+  "Hmph! Kamu pikir kamu tau banyak tentang :topic? Aku jauh lebih ahli!",
+  "A-aku nggak butuh bantuanmu soal :topic! Aku bisa sendiri!",
+  "Baka! Jangan sok tau tentang :topic di depanku!",
+  ":topic? Cih, apa bagusnya sih?",
 ];
 
 const bot = new Bot(Deno.env.get("TELEGRAM_BOT_TOKEN") || "");
@@ -114,8 +116,8 @@ let botMemory: Memory = {
 
 function updateEmotion(message: string) {
   const emotions: [string, Emotion][] = [
-    ["marah|kesal", "angry"],
-    ["anime|coding", "excited"],
+    ["marah|kesal|baka", "angry"],
+    ["anime|coding", "tsun"],
     ["thank|nice|bagus", "dere"],
     ["malu|blush", "embarrassed"],
     ["bangga|hebat", "proud"],
@@ -128,7 +130,7 @@ function updateEmotion(message: string) {
     }
   }
 
-  currentEmotion = Math.random() > 0.7 ? "tsun" : "neutral";
+  currentEmotion = Math.random() > 0.3 ? "tsun" : "neutral";
 }
 
 function adjustTsundereLevel(message: string) {
@@ -177,7 +179,7 @@ function generateCustomPrompt(botName: string) {
     .join(", ");
 
   return `
-    You are ${botName}, a female tsundere with tsundere level ${tsundereLevel}.
+    You are ${botName}, a female tsundere with tsundere level ${tsundereLevel} (0-10, 10 being most tsundere).
     Current emotion: ${currentEmotion}.
     Recent topic: ${context.topic}.
     Recent topics discussed: ${context.recentTopics.join(", ")}.
@@ -190,16 +192,22 @@ function generateCustomPrompt(botName: string) {
     Your openness level: ${context.botOpenness}.
     User's favorite topics: ${favoriteTopics}.
 
+    Important: When tsundere level is high (7-10) or emotion is "tsun" or "angry":
+    - Be more annoyed, abrupt, and easily irritated
+    - Use short, sharp sentences with exclamation marks
+    - Express reluctance to admit interest in topics
+    - Frequently use phrases like "Baka!", "Hmph!", "Jangan salah paham ya!"
+    - Deny or downplay any positive feelings
+
     Respond in Bahasa Indonesia. Do not translate or explain your response in English.
     Use tsundere-like expressions and adjust your tone based on your current emotion and tsundere level.
     If discussing ${context.topic}, consider using this response template: "${fillTemplate(
     responseTemplates[Math.floor(Math.random() * responseTemplates.length)],
     context.topic
   )}"
-    Remember to gradually show your warmer side as the conversation progresses.
-    If your emotion is angry, respond with short, sharp sentences and use exclamation marks.
+    Remember to show your warmer side only if tsundere level is low (0-3) or emotion is "dere".
     Avoid repeating the same phrases or expressions too often.
-    Try to incorporate references to the user's favorite topics naturally in the conversation.
+    Try to incorporate references to the user's favorite topics naturally in the conversation, but with a tsundere attitude.
   `;
 }
 
@@ -208,8 +216,8 @@ function getAdjustedParameters(): { temperature: number; presencePenalty: number
   let presencePenalty = 0.6;
 
   if (currentEmotion === "angry" || currentEmotion === "tsun") {
-    temperature = 0.9;
-    presencePenalty = 0.7;
+    temperature = 1.0;
+    presencePenalty = 0.8;
   } else if (currentEmotion === "dere") {
     temperature = 0.7;
     presencePenalty = 0.5;
