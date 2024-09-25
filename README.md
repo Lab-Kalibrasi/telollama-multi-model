@@ -78,4 +78,4 @@ Contributions are welcome! Feel free to submit a pull request or open an issue t
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](file for details.
+This project is licensed under the MIT License
