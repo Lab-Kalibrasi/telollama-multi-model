@@ -1,7 +1,10 @@
-import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts";
-import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
-import { useDB } from './utils/db.ts';
-import "https://deno.land/std@0.177.0/dotenv/load.ts";
+import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.18.1/mod.ts";
+import { OpenAI } from "https://deno.land/x/openai@v4.20.1/mod.ts";
+import { createHash } from "https://deno.land/std@0.177.0/hash/mod.ts";
+import { load } from "https://deno.land/std@0.177.0/dotenv/mod.ts";
+
+// Load environment variables
+await load({ export: true });
 
 // Initialize Deno KV
 const kv = await Deno.openKv();
@@ -115,11 +118,6 @@ const openai = new OpenAI({
   },
 });
 
-const { getMessages, saveMessages } = useDB({
-  url: Deno.env.get("DATABASE_URL") || "",
-  authToken: Deno.env.get("DATABASE_API_TOKEN") || "",
-});
-
 const models = [
   "meta-llama/llama-3-8b-instruct:free",
   "mistralai/mistral-7b-instruct:free",
@@ -138,11 +136,13 @@ async function setInKV<T>(key: string[], value: T): Promise<void> {
 
 // Cache API responses
 async function getCachedAPIResponse(model: string, prompt: string): Promise<string | null> {
-  return await getFromKV<string | null>(['api_cache', model, prompt], null);
+  const key = createHash("md5").update(`${model}_${prompt}`).toString();
+  return await getFromKV<string | null>(['api_cache', key], null);
 }
 
 async function setCachedAPIResponse(model: string, prompt: string, response: string): Promise<void> {
-  await setInKV(['api_cache', model, prompt], response);
+  const key = createHash("md5").update(`${model}_${prompt}`).toString();
+  await setInKV(['api_cache', key], response);
 }
 
 // User-specific context cache
@@ -379,7 +379,6 @@ function getAdjustedParameters(currentEmotion: Emotion, tsundereLevel: number): 
 
 bot.command("start", (ctx) => {
   const greeting = "Halo! B-bukan berarti aku senang ngobrol denganmu...";
-  saveMessages(ctx.chat.id, [{ role: "assistant", content: greeting }]);
   ctx.reply(greeting);
 });
 
@@ -387,7 +386,6 @@ bot.on("message", async (ctx) => {
   if (ctx.update.message.chat.type !== "private") return;
 
   const userId = ctx.update.message.from.id;
-  const messages = await getMessages(ctx.chat.id);
   bot.api.sendChatAction(ctx.chat.id, "typing");
 
   let selectedModel: string | null = null;
@@ -415,7 +413,7 @@ bot.on("message", async (ctx) => {
     const { temperature, presencePenalty } = getAdjustedParameters(currentEmotion, tsundereLevel);
 
     // Check cache for API response
-    const cacheKey = `${selectedModel}_${customPrompt}_${userMessage}`;
+    const cacheKey = `${selectedModel}_${userMessage}`;
     let message = await getCachedAPIResponse(selectedModel, cacheKey);
 
     if (!message) {
@@ -426,7 +424,6 @@ bot.on("message", async (ctx) => {
             role: "system",
             content: customPrompt,
           },
-          ...messages,
           {
             role: "user",
             content: userMessage,
@@ -455,11 +452,6 @@ bot.on("message", async (ctx) => {
     }
 
     await setUserMemory(userId, botMemory);
-
-    saveMessages(ctx.chat.id, [
-      { role: "user", content: userMessage },
-      { role: "assistant", content: message },
-    ]);
 
     console.log({
       chat_id: ctx.chat.id,
