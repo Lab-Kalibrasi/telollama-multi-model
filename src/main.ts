@@ -68,7 +68,7 @@ const openai = new OpenAI({
 
 const googleAI = new GoogleGenerativeAI(Deno.env.get("GOOGLE_AI_API_KEY") || "");
 
-const { getMessages, saveMessages } = useDB({
+const { getMessages, getTopicResponses, saveMessages, saveTopicResponse } = useDB({
   url: Deno.env.get("DATABASE_URL") || "",
   authToken: Deno.env.get("DATABASE_API_TOKEN") || "",
 });
@@ -202,20 +202,15 @@ function fillTemplate(template: string, topic: string) {
 }
 
 async function getTopicResponse(topic: string): Promise<string> {
-  const messages = await getMessages(0); // Use 0 as a special chat_id for topic responses
-  const topicResponses = messages.filter(m => m.role === "assistant" && m.content.startsWith(`${topic}:`));
+  const topicResponses = await getTopicResponses();
+  const responses = topicResponses[topic] || [];
 
-  if (topicResponses.length > 0) {
-    const randomResponse = topicResponses[Math.floor(Math.random() * topicResponses.length)];
-    return randomResponse.content.split(':')[1].trim();
+  if (responses.length > 0) {
+    return responses[Math.floor(Math.random() * responses.length)];
   }
 
   // Fallback to the existing static responses if no dynamic response is found
   return fillTemplate(responseTemplates[Math.floor(Math.random() * responseTemplates.length)], topic);
-}
-
-async function saveTopicResponse(topic: string, response: string) {
-  await saveMessages(0, [{ role: "assistant", content: `${topic}: ${response}` }]);
 }
 
 function getTsunderePhrase(level: number, emotion: Emotion): string {
@@ -273,10 +268,9 @@ async function generateCustomPrompt(botName: string, latestUserMessage: string) 
   const topicResponse = await getTopicResponse(context.topic);
 
   // Get all topic responses from the database
-  const allTopicResponses = await getMessages(0);
-  const topicResponsesString = allTopicResponses
-    .filter(m => m.role === "assistant")
-    .map(m => m.content)
+  const allTopicResponses = await getTopicResponses();
+  const topicResponsesString = Object.entries(allTopicResponses)
+    .map(([topic, responses]) => `${topic}: ${responses.join(", ")}`)
     .join("\n");
 
   return `

@@ -15,30 +15,51 @@ export const useDB = (config: Partial<Config>) => {
 
   const getMessages = async (chatId: number): Promise<OllamaMessage[]> => {
     const data = await turso.execute({
-      sql:
-        `SELECT role, content FROM messages WHERE chat_id = :chatId ORDER BY created_at ASC`,
+      sql: `SELECT role, content FROM messages WHERE chat_id = :chatId ORDER BY created_at ASC`,
       args: { chatId },
     })
 
     return data.rows as unknown as OllamaMessage[]
   }
 
-  const saveMessages = async (
-    chatId: number,
-    messages: OllamaMessage[],
-  ) => {
+  const getTopicResponses = async (): Promise<Record<string, string[]>> => {
+    const data = await turso.execute({
+      sql: `SELECT content FROM messages WHERE chat_id = 0`,
+    })
+
+    const topicResponses: Record<string, string[]> = {}
+    for (const row of data.rows as unknown as { content: string }[]) {
+      const [topic, response] = row.content.split(': ')
+      if (!topicResponses[topic]) {
+        topicResponses[topic] = []
+      }
+      topicResponses[topic].push(response)
+    }
+
+    return topicResponses
+  }
+
+  const saveMessages = async (chatId: number, messages: OllamaMessage[]) => {
     const placeholders = messages.map(() => '(?, ?, ?)').join(',')
     const args = messages.map((m) => [m.role, m.content, chatId]).flat()
 
     return await turso.execute({
-      sql:
-        `INSERT INTO messages (role, content, chat_id) VALUES ${placeholders}`,
+      sql: `INSERT INTO messages (role, content, chat_id) VALUES ${placeholders}`,
       args,
+    })
+  }
+
+  const saveTopicResponse = async (topic: string, response: string) => {
+    return await turso.execute({
+      sql: `INSERT INTO messages (role, content, chat_id) VALUES (?, ?, ?)`,
+      args: ['assistant', `${topic}: ${response}`, 0],
     })
   }
 
   return {
     getMessages,
+    getTopicResponses,
     saveMessages,
+    saveTopicResponse,
   }
 }
