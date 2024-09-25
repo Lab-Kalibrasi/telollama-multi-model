@@ -98,6 +98,8 @@ let botMemory: Memory = {
   userPerformance: {},
 };
 
+const recentResponses: string[] = [];
+
 async function healthCheck(model: string): Promise<boolean> {
   try {
     if (model.startsWith("google/")) {
@@ -260,7 +262,7 @@ function adjustLevelByEmotion(level: number, emotion: Emotion): number {
   return Math.max(0, Math.min(10, level + adjustments[emotion]));
 }
 
-async function generateCustomPrompt(botName: string) {
+async function generateCustomPrompt(botName: string, latestUserMessage: string) {
   const trait = personalityTraits[Math.floor(Math.random() * personalityTraits.length)];
   const topPerformance = Object.entries(botMemory.userPerformance)
     .sort(([, a], [, b]) => b - a)
@@ -308,6 +310,10 @@ async function generateCustomPrompt(botName: string) {
 
     Always respond in Bahasa Indonesia. Avoid repeating exact phrases. Incorporate Eva and piloting references naturally, especially for related topics.
     React to the user's piloting performance, either by mocking low scores or reluctantly acknowledging high ones.
+
+    The user's latest message is: "${latestUserMessage}"
+    Respond directly to this message, ensuring your response is relevant and not repetitive.
+    Do not mention "test" unless the user specifically talks about testing something.
   `;
 }
 
@@ -372,43 +378,61 @@ bot.on("message", async (ctx) => {
     adjustTsundereLevel(userMessage);
     updateContext(userMessage);
 
-    const customPrompt = await generateCustomPrompt(ctx.me.first_name);
-    const { temperature, presencePenalty, frequencyPenalty } = getAdjustedParameters();
+    const customPrompt = await generateCustomPrompt(ctx.me.first_name, userMessage);
+    let { temperature, presencePenalty, frequencyPenalty } = getAdjustedParameters();
+
+    // Increase temperature slightly to encourage more diverse responses
+    temperature = Math.min(temperature + 0.2, 1.0);
 
     let message: string;
+    let attempts = 0;
+    const maxAttempts = 3;
 
-    if (selectedModel.startsWith("google/")) {
-      const generativeModel = googleAI.getGenerativeModel({ model: selectedModel.replace("google/", "") });
-      const result = await generativeModel.generateContent({
-        contents: [
-          { role: "user", parts: [{ text: customPrompt }] },
-          ...messages.map(msg => ({ role: msg.role === "assistant" ? "model" : "user", parts: [{ text: msg.content }] })),
-          { role: "user", parts: [{ text: userMessage }] },
-        ],
-      });
-      message = result.response.text();
-    } else {
-      const completion = await openai.chat.completions.create({
-        model: selectedModel,
-        messages: [
-          {
-            role: "system",
-            content: customPrompt,
-          },
-          ...messages,
-          {
-            role: "user",
-            content: userMessage,
-          },
-        ],
-        temperature: temperature,
-        top_p: 0.95,
-        frequency_penalty: frequencyPenalty,
-        presence_penalty: presencePenalty,
-        max_tokens: 150,
-      });
+    do {
+      if (selectedModel.startsWith("google/")) {
+        const generativeModel = googleAI.getGenerativeModel({ model: selectedModel.replace("google/", "") });
+        const result = await generativeModel.generateContent({
+          contents: [
+            { role: "user", parts: [{ text: customPrompt }] },
+            ...messages.slice(-5).map(msg => ({ role: msg.role === "assistant" ? "model" : "user", parts: [{ text: msg.content }] })),
+            { role: "user", parts: [{ text: userMessage }] },
+          ],
+        });
+        message = result.response.text();
+      } else {
+        const completion = await openai.chat.completions.create({
+          model: selectedModel,
+          messages: [
+            {
+              role: "system",
+              content: customPrompt,
+            },
+            ...messages.slice(-5),
+            {
+              role: "user",
+              content: userMessage,
+            },
+          ],
+          temperature: temperature,
+          top_p: 0.95,
+          frequency_penalty: frequencyPenalty,
+          presence_penalty: presencePenalty,
+          max_tokens: 150,
+        });
 
-      message = completion.choices[0].message.content;
+        message = completion.choices[0].message.content;
+      }
+
+      attempts++;
+    } while (recentResponses.includes(message) && attempts < maxAttempts);
+
+    if (attempts >= maxAttempts) {
+      message = "Hmph! Aku tidak mau mengulang-ulang diriku. Coba tanya yang lain!";
+    }
+
+    recentResponses.push(message);
+    if (recentResponses.length > 5) {
+      recentResponses.shift();
     }
 
     if (userMessage.toLowerCase().includes("eva") && !botMemory.mentionedEva.includes(userMessage)) {
@@ -441,6 +465,7 @@ bot.on("message", async (ctx) => {
       temperature: temperature,
       presence_penalty: presencePenalty,
       frequency_penalty: frequencyPenalty,
+      attempts: attempts,
     });
 
     ctx.reply(message);
