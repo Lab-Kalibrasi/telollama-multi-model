@@ -23,21 +23,31 @@ export const useDB = (config: Partial<Config>) => {
   }
 
   const getTopicResponses = async (): Promise<Record<string, string[]>> => {
-    const data = await turso.execute({
-      sql: `SELECT content FROM messages WHERE chat_id = 0`,
-    })
+    try {
+      const data = await turso.execute({
+        sql: `SELECT content FROM messages WHERE chat_id = 0`,
+      });
 
-    const topicResponses: Record<string, string[]> = {}
-    for (const row of data.rows as unknown as { content: string }[]) {
-      const [topic, response] = row.content.split(': ')
-      if (!topicResponses[topic]) {
-        topicResponses[topic] = []
+      const topicResponses: Record<string, string[]> = {};
+
+      if (data && data.rows && Array.isArray(data.rows)) {
+        for (const row of data.rows as { content: string }[]) {
+          const [topic, response] = row.content.split(': ');
+          if (topic && response) {
+            if (!topicResponses[topic]) {
+              topicResponses[topic] = [];
+            }
+            topicResponses[topic].push(response);
+          }
+        }
       }
-      topicResponses[topic].push(response)
-    }
 
-    return topicResponses
-  }
+      return topicResponses;
+    } catch (error) {
+      console.error("Error fetching topic responses:", error);
+      return {};
+    }
+  };
 
   const saveMessages = async (chatId: number, messages: OllamaMessage[]) => {
     const placeholders = messages.map(() => '(?, ?, ?)').join(',')
