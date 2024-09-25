@@ -1,4 +1,4 @@
-import { Bot } from 'grammy'
+import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts";
 import { OpenAI } from "https://cdn.skypack.dev/openai@4.28.0";
 import { useDB } from './utils/db.ts'
 import 'jsr:@std/dotenv/load'
@@ -56,7 +56,6 @@ const { getMessages, saveMessages } = useDB({
   url: Deno.env.get("DATABASE_URL") || "",
   authToken: Deno.env.get("DATABASE_API_TOKEN") || "",
 });
-
 
 const models = [
   "meta-llama/llama-3-8b-instruct:free",
@@ -229,4 +228,19 @@ bot.on('message', async (ctx) => {
   }
 })
 
-bot.start()
+// Webhook handling
+const handleUpdate = webhookCallback(bot, "std/http");
+
+Deno.serve(async (req) => {
+  if (req.method === "POST") {
+    const url = new URL(req.url);
+    if (url.pathname.slice(1) === bot.token) {
+      try {
+        return await handleUpdate(req);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+  return new Response();
+});
