@@ -2,6 +2,7 @@ import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts"
 import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
 import { useDB } from './utils/db.ts';
 import "https://deno.land/std@0.177.0/dotenv/load.ts";
+import { GoogleGenerativeAI } from "@google-ai/generativelanguage";
 
 const personalityTraits = [
   "Fiercely competitive",
@@ -90,6 +91,8 @@ const openai = new OpenAI({
   },
 });
 
+const googleAI = new GoogleGenerativeAI(Deno.env.get("GOOGLE_AI_API_KEY") || "");
+
 const { getMessages, saveMessages } = useDB({
   url: Deno.env.get("DATABASE_URL") || "",
   authToken: Deno.env.get("DATABASE_API_TOKEN") || "",
@@ -98,23 +101,9 @@ const { getMessages, saveMessages } = useDB({
 const models = [
   "nousresearch/hermes-3-llama-3.1-405b:free",
   "meta-llama/llama-3-8b-instruct:free",
-  "google/gemini-pro-1.5-exp",
-  "google/gemma-2-9b-it:free",
+  "google/gemini-pro",
+  "google/gemma-2b-it",
 ];
-
-async function healthCheck(model: string): Promise<boolean> {
-  try {
-    const completion = await openai.chat.completions.create({
-      model: model,
-      messages: [{ role: "user", content: "Hi" }],
-      max_tokens: 1,
-    });
-    return completion.choices.length > 0;
-  } catch (error) {
-    console.error(`Health check failed for model ${model}:`, error);
-    return false;
-  }
-}
 
 let context: ConversationContext = {
   topic: "general",
@@ -133,6 +122,37 @@ let botMemory: Memory = {
   insults: 0,
   userPerformance: {},
 };
+
+async function healthCheck(model: string): Promise<boolean> {
+  try {
+    if (model.startsWith("google/")) {
+      const generationConfig = {
+        stopSequences: ["Human:", "Assistant:"],
+        maxOutputTokens: 1,
+        temperature: 0.1,
+        topP: 0.1,
+        topK: 16,
+      };
+
+      const result = await googleAI.getGenerativeModel({ model: model.replace("google/", "") }).generateContent({
+        contents: [{ role: "user", parts: [{ text: "Hi" }] }],
+        generationConfig,
+      });
+
+      return result.response.candidates.length > 0;
+    } else {
+      const completion = await openai.chat.completions.create({
+        model: model,
+        messages: [{ role: "user", content: "Hi" }],
+        max_tokens: 1,
+      });
+      return completion.choices.length > 0;
+    }
+  } catch (error) {
+    console.error(`Health check failed for model ${model}:`, error);
+    return false;
+  }
+}
 
 function updateEmotion(message: string) {
   const emotions: [string, Emotion][] = [
@@ -364,27 +384,50 @@ bot.on("message", async (ctx) => {
     const customPrompt = generateCustomPrompt(ctx.me.first_name);
     const { temperature, presencePenalty, frequencyPenalty } = getAdjustedParameters();
 
-    const completion = await openai.chat.completions.create({
-      model: selectedModel,
-      messages: [
-        {
-          role: "system",
-          content: customPrompt,
-        },
-        ...messages,
-        {
-          role: "user",
-          content: userMessage,
-        },
-      ],
-      temperature: temperature,
-      top_p: 0.95,
-      frequency_penalty: frequencyPenalty,
-      presence_penalty: presencePenalty,
-      max_tokens: 150,
-    });
+    let message: string;
 
-    const message = completion.choices[0].message.content;
+    if (selectedModel.startsWith("google/")) {
+      const generationConfig = {
+        stopSequences: ["Human:", "Assistant:"],
+        maxOutputTokens: 150,
+        temperature: temperature,
+        topP: 0.95,
+        topK: 40,
+      };
+
+      const result = await googleAI.getGenerativeModel({ model: selectedModel.replace("google/", "") }).generateContent({
+        contents: [
+          { role: "system", parts: [{ text: customPrompt }] },
+          ...messages.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] })),
+          { role: "user", parts: [{ text: userMessage }] },
+        ],
+        generationConfig,
+      });
+
+      message = result.response.candidates[0].content.parts[0].text;
+    } else {
+      const completion = await openai.chat.completions.create({
+        model: selectedModel,
+        messages: [
+          {
+            role: "system",
+            content: customPrompt,
+          },
+          ...messages,
+          {
+            role: "user",
+            content: userMessage,
+          },
+        ],
+        temperature: temperature,
+        top_p: 0.95,
+        frequency_penalty: frequencyPenalty,
+        presence_penalty: presencePenalty,
+        max_tokens: 150,
+      });
+
+      message = completion.choices[0].message.content;
+    }
 
     if (userMessage.toLowerCase().includes("eva") && !botMemory.mentionedEva.includes(userMessage)) {
       botMemory.mentionedEva.push(userMessage);
