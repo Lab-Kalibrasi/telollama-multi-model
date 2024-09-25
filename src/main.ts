@@ -40,31 +40,6 @@ interface Memory {
   userPerformance: Record<string, number>;
 }
 
-const topicResponses = {
-  eva: [
-    "Hah! Kamu pikir kamu tahu tentang EVA? Aku yang terbaik di sini!",
-    "EVA bukan mainan, tau! Jangan sok tahu!",
-    "Hmph, mungkin kamu tidak seburuk yang kukira soal EVA...",
-    "Kamu... benar-benar paham EVA? B-bukan berarti aku terkesan atau apa!",
-  ],
-  piloting: [
-    "Jangan harap bisa mengalahkan rekorku dalam simulasi!",
-    "Kamu pikir bisa jadi pilot yang lebih baik? Jangan membuatku tertawa!",
-    "B-bukan berarti aku mengakuimu sebagai pilot yang baik atau apa...",
-    "Hmph, lumayan juga kemampuan pilotingmu. Tapi masih jauh di bawahku!",
-  ],
-  nerv: [
-    "NERV? Hah, aku yang paling berharga di sini!",
-    "Jangan bicara seolah kamu tahu segalanya tentang NERV!",
-    "Kamu... lumayan juga pengetahuanmu tentang NERV. T-tapi tetap saja aku lebih tahu!",
-  ],
-  angel: [
-    "Angel? Aku bisa mengalahkan mereka semua sendirian!",
-    "Jangan sok berani! Menghadapi Angel tidak semudah yang kau kira!",
-    "Hmph, setidaknya kamu tahu tentang ancaman Angel...",
-  ],
-};
-
 const responseTemplates = [
   "Hah! :topic? Jangan bercanda!",
   "Kamu pikir kamu hebat dalam :topic? Aku jauh lebih baik!",
@@ -225,6 +200,23 @@ function fillTemplate(template: string, topic: string) {
   return template.replace(":topic", topic);
 }
 
+async function getTopicResponse(topic: string): Promise<string> {
+  const messages = await getMessages(0); // Use 0 as a special chat_id for topic responses
+  const topicResponses = messages.filter(m => m.role === "assistant" && m.content.startsWith(`${topic}:`));
+
+  if (topicResponses.length > 0) {
+    const randomResponse = topicResponses[Math.floor(Math.random() * topicResponses.length)];
+    return randomResponse.content.split(':')[1].trim();
+  }
+
+  // Fallback to the existing static responses if no dynamic response is found
+  return fillTemplate(responseTemplates[Math.floor(Math.random() * responseTemplates.length)], topic);
+}
+
+async function saveTopicResponse(topic: string, response: string) {
+  await saveMessages(0, [{ role: "assistant", content: `${topic}: ${response}` }]);
+}
+
 function getTsunderePhrase(level: number, emotion: Emotion): string {
   const phrases = {
     high: [
@@ -268,14 +260,7 @@ function adjustLevelByEmotion(level: number, emotion: Emotion): number {
   return Math.max(0, Math.min(10, level + adjustments[emotion]));
 }
 
-function getTopicResponse(topic: string): string {
-  if (topicResponses[topic as keyof typeof topicResponses]) {
-    return topicResponses[topic as keyof typeof topicResponses][Math.floor(Math.random() * topicResponses[topic as keyof typeof topicResponses].length)];
-  }
-  return fillTemplate(responseTemplates[Math.floor(Math.random() * responseTemplates.length)], topic);
-}
-
-function generateCustomPrompt(botName: string) {
+async function generateCustomPrompt(botName: string) {
   const trait = personalityTraits[Math.floor(Math.random() * personalityTraits.length)];
   const topPerformance = Object.entries(botMemory.userPerformance)
     .sort(([, a], [, b]) => b - a)
@@ -284,7 +269,14 @@ function generateCustomPrompt(botName: string) {
     .join(", ");
 
   const tsunderePhrase = getTsunderePhrase(tsundereLevel, currentEmotion);
-  const topicResponse = getTopicResponse(context.topic);
+  const topicResponse = await getTopicResponse(context.topic);
+
+  // Get all topic responses from the database
+  const allTopicResponses = await getMessages(0);
+  const topicResponsesString = allTopicResponses
+    .filter(m => m.role === "assistant")
+    .map(m => m.content)
+    .join("\n");
 
   return `
     You are ${botName}, a female tsundere character inspired by Asuka Langley Soryu from Neon Genesis Evangelion.
@@ -305,6 +297,9 @@ function generateCustomPrompt(botName: string) {
     Important: Maintain Asuka's tsundere personality consistently. Use the following as a guide:
     - Tsundere phrase to incorporate: "${tsunderePhrase}"
     - Topic-specific response to consider: "${topicResponse}"
+
+    All topic responses to reference:
+    ${topicResponsesString}
 
     Adjust your response based on the tsundere level and current emotion:
     - High tsundere (7-10) or "angry"/"competitive" emotion: Be more aggressive, boastful, and dismissive.
@@ -377,7 +372,7 @@ bot.on("message", async (ctx) => {
     adjustTsundereLevel(userMessage);
     updateContext(userMessage);
 
-    const customPrompt = generateCustomPrompt(ctx.me.first_name);
+    const customPrompt = await generateCustomPrompt(ctx.me.first_name);
     const { temperature, presencePenalty, frequencyPenalty } = getAdjustedParameters();
 
     let message: string;
@@ -421,6 +416,11 @@ bot.on("message", async (ctx) => {
     }
     if (userMessage.toLowerCase().includes("pilot") && !botMemory.mentionedPilotingSkills.includes(userMessage)) {
       botMemory.mentionedPilotingSkills.push(userMessage);
+    }
+
+    // Save the new response as a topic response if it's relevant
+    if (context.topic !== "general") {
+      await saveTopicResponse(context.topic, message);
     }
 
     saveMessages(ctx.chat.id, [
