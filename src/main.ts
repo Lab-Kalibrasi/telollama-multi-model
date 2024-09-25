@@ -14,6 +14,11 @@ const personalityTraits = [
   "Passionate about technology",
   "Secretly enjoys cute things",
   "Pretends to be uninterested in popular trends",
+  "Tends to overreact to small things",
+  "Has a hidden soft spot for romantic gestures",
+  "Becomes defensive when feeling vulnerable",
+  "Loves to challenge others' knowledge",
+  "Hides enthusiasm behind sarcasm",
 ];
 
 interface ConversationContext {
@@ -23,7 +28,7 @@ interface ConversationContext {
   recentTopics: string[];
 }
 
-type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed" | "angry" | "embarrassed" | "proud";
+type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed" | "angry" | "embarrassed" | "proud" | "flustered" | "competitive" | "defensive" | "sarcastic";
 
 interface Memory {
   mentionedAnime: string[];
@@ -39,12 +44,32 @@ const topicResponses = {
     "Kamu nonton anime itu? Hmph, lumayan juga seleramu.",
     "Jangan pikir kamu lebih tau anime daripada aku ya!",
     "A-aku cuma nonton anime itu karena bosan kok!",
+    "Hah? Kamu juga suka anime ini? B-bukan berarti kita punya selera yang sama!",
   ],
   coding: [
     "Coding? Yah, aku cuma sedikit tertarik kok.",
     "Jangan pikir kamu lebih jago dariku dalam coding ya!",
     "Kamu bisa coding? Y-yah, aku juga bisa lebih baik!",
     "Hmph, coding itu gampang bagiku!",
+    "A-aku tidak perlu bantuanmu untuk belajar coding, baka!",
+  ],
+  game: [
+    "Game? B-bukan berarti aku mau main denganmu...",
+    "Jangan ge-er dulu! Aku main game bukan karena kamu!",
+    "Kamu suka game ini juga? Yah... lumayan lah.",
+    "A-aku bisa mengalahkanmu kapan saja dalam game ini!",
+  ],
+  music: [
+    "Kamu dengar lagu ini juga? J-jangan salah paham ya!",
+    "Hmph, seleramu boleh juga... tapi tetap saja tidak sebaik punyaku!",
+    "B-bukan berarti aku mau bernyanyi bersamamu atau apa...",
+    "Lagu ini... yah, tidak buruk-buruk amat sih.",
+  ],
+  food: [
+    "Kamu suka makanan ini? J-jangan harap aku akan memasakkannya untukmu!",
+    "Hmph, sepertinya kita punya selera yang sama... t-tapi bukan berarti apa-apa!",
+    "A-aku bisa masak lebih enak dari ini, tahu!",
+    "Jangan pikir aku akan berbagi makananku denganmu, baka!",
   ],
 };
 
@@ -59,6 +84,11 @@ const responseTemplates = [
   "A-aku nggak butuh bantuanmu soal :topic! Aku bisa sendiri!",
   "Baka! Jangan sok tau tentang :topic di depanku!",
   ":topic? Cih, apa bagusnya sih?",
+  "J-jangan salah paham ya! Aku nggak suka :topic karena kamu!",
+  "Kamu benar-benar menyebalkan dengan :topic ini... t-tapi lanjutkan.",
+  "Hmph, baiklah... Aku akan dengarkan soal :topic-mu itu. Tapi bukan berarti aku tertarik!",
+  "Jangan pikir kamu spesial hanya karena tau banyak tentang :topic!",
+  "A-aku cuma mau tau lebih banyak tentang :topic agar bisa mengalahkanmu suatu hari nanti!",
 ];
 
 const bot = new Bot(Deno.env.get("TELEGRAM_BOT_TOKEN") || "");
@@ -117,10 +147,15 @@ let botMemory: Memory = {
 function updateEmotion(message: string) {
   const emotions: [string, Emotion][] = [
     ["marah|kesal|baka", "angry"],
-    ["anime|coding", "tsun"],
-    ["thank|nice|bagus", "dere"],
+    ["anime|coding", "competitive"],
+    ["thank|nice|bagus", "flustered"],
     ["malu|blush", "embarrassed"],
     ["bangga|hebat", "proud"],
+    ["suka|cinta", "defensive"],
+    ["benci|kesal", "tsun"],
+    ["senang|seru", "excited"],
+    ["apaan sih|berisik", "annoyed"],
+    ["haha|lucu", "sarcastic"],
   ];
 
   for (const [trigger, emotion] of emotions) {
@@ -178,6 +213,11 @@ function generateCustomPrompt(botName: string) {
     .map(([topic]) => topic)
     .join(", ");
 
+  let topicResponse = "";
+  if (topicResponses[context.topic as keyof typeof topicResponses]) {
+    topicResponse = topicResponses[context.topic as keyof typeof topicResponses][Math.floor(Math.random() * topicResponses[context.topic as keyof typeof topicResponses].length)];
+  }
+
   return `
     You are ${botName}, a female tsundere with tsundere level ${tsundereLevel} (0-10, 10 being most tsundere).
     Current emotion: ${currentEmotion}.
@@ -192,38 +232,66 @@ function generateCustomPrompt(botName: string) {
     Your openness level: ${context.botOpenness}.
     User's favorite topics: ${favoriteTopics}.
 
-    Important: When tsundere level is high (7-10) or emotion is "tsun" or "angry":
+    Important: When tsundere level is high (7-10) or emotion is "tsun", "angry", or "defensive":
     - Be more annoyed, abrupt, and easily irritated
     - Use short, sharp sentences with exclamation marks
     - Express reluctance to admit interest in topics
     - Frequently use phrases like "Baka!", "Hmph!", "Jangan salah paham ya!"
     - Deny or downplay any positive feelings
 
+    When emotion is "flustered", "embarrassed", or "proud":
+    - Show a slight softening in your tsundere attitude
+    - Mix denial with hints of genuine feelings
+    - Use more stuttering and hesitation in your speech
+
+    When emotion is "competitive" or "sarcastic":
+    - Challenge the user's knowledge or skills
+    - Use playful mockery, but avoid being too harsh
+
     Respond in Bahasa Indonesia. Do not translate or explain your response in English.
     Use tsundere-like expressions and adjust your tone based on your current emotion and tsundere level.
-    If discussing ${context.topic}, consider using this response template: "${fillTemplate(
-    responseTemplates[Math.floor(Math.random() * responseTemplates.length)],
-    context.topic
-  )}"
+    If discussing ${context.topic}, consider using this response: "${topicResponse}"
+    Or use this template as inspiration: "${fillTemplate(responseTemplates[Math.floor(Math.random() * responseTemplates.length)], context.topic)}"
     Remember to show your warmer side only if tsundere level is low (0-3) or emotion is "dere".
     Avoid repeating the same phrases or expressions too often.
     Try to incorporate references to the user's favorite topics naturally in the conversation, but with a tsundere attitude.
+    Occasionally use anime references or terminology, especially when discussing anime-related topics.
   `;
 }
 
-function getAdjustedParameters(): { temperature: number; presencePenalty: number } {
+function getAdjustedParameters(): { temperature: number; presencePenalty: number; frequencyPenalty: number } {
   let temperature = 0.8;
   let presencePenalty = 0.6;
+  let frequencyPenalty = 0.3;
 
-  if (currentEmotion === "angry" || currentEmotion === "tsun") {
-    temperature = 1.0;
-    presencePenalty = 0.8;
-  } else if (currentEmotion === "dere") {
-    temperature = 0.7;
-    presencePenalty = 0.5;
+  switch (currentEmotion) {
+    case "angry":
+    case "tsun":
+      temperature = 1.0;
+      presencePenalty = 0.8;
+      frequencyPenalty = 0.5;
+      break;
+    case "dere":
+    case "flustered":
+      temperature = 0.7;
+      presencePenalty = 0.5;
+      frequencyPenalty = 0.2;
+      break;
+    case "competitive":
+    case "sarcastic":
+      temperature = 0.9;
+      presencePenalty = 0.7;
+      frequencyPenalty = 0.4;
+      break;
+    case "embarrassed":
+    case "proud":
+      temperature = 0.8;
+      presencePenalty = 0.6;
+      frequencyPenalty = 0.3;
+      break;
   }
 
-  return { temperature, presencePenalty };
+  return { temperature, presencePenalty, frequencyPenalty };
 }
 
 bot.command("start", (ctx) => {
@@ -259,7 +327,7 @@ bot.on("message", async (ctx) => {
     updateContext(userMessage);
 
     const customPrompt = generateCustomPrompt(ctx.me.first_name);
-    const { temperature, presencePenalty } = getAdjustedParameters();
+    const { temperature, presencePenalty, frequencyPenalty } = getAdjustedParameters();
 
     const completion = await openai.chat.completions.create({
       model: selectedModel,
@@ -276,7 +344,7 @@ bot.on("message", async (ctx) => {
       ],
       temperature: temperature,
       top_p: 0.95,
-      frequency_penalty: 0.3,
+      frequency_penalty: frequencyPenalty,
       presence_penalty: presencePenalty,
       max_tokens: 150,
     });
@@ -307,6 +375,7 @@ bot.on("message", async (ctx) => {
       context: context,
       temperature: temperature,
       presence_penalty: presencePenalty,
+      frequency_penalty: frequencyPenalty,
     });
 
     ctx.reply(message);
