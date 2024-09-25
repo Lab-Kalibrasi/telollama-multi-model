@@ -70,24 +70,20 @@ const googleAI = new GoogleGenerativeAI(Deno.env.get("GOOGLE_AI_API_KEY") || "")
 
 const safetySettings = [
   {
-    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    category: HarmCategory.HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
   },
   {
-    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    category: HarmCategory.HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
   },
   {
-    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    category: HarmCategory.SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
   },
   {
-    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-  },
-  {
-    category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    category: HarmCategory.DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
   },
 ];
 
@@ -163,14 +159,29 @@ const modelAdapters = {
   },
 };
 
+async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.status === 429 && i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Max retries reached");
+}
+
 async function healthCheck(model: string): Promise<boolean> {
   try {
     const adapter = modelAdapters[model];
     if (!adapter) {
       return false;
     }
-    const result = await adapter([{ role: "user", content: "Hi" }], "You are an AI assistant.");
-    return result.length > 0;
+    const result = await retryWithBackoff(() => adapter([{ role: "user", content: "Hi" }], "You are an AI assistant."));
+    return result && result.length > 0;
   } catch (error) {
     console.error(`Health check failed for model ${model}:`, error);
     return false;
@@ -179,14 +190,11 @@ async function healthCheck(model: string): Promise<boolean> {
 
 async function getWorkingModel(): Promise<string | null> {
   for (const model of models) {
-    try {
-      if (await healthCheck(model)) {
-        return model;
-      }
-    } catch (error) {
-      console.error(`Health check failed for model ${model}:`, error);
+    if (await healthCheck(model)) {
+      return model;
     }
   }
+  console.error("No working models available");
   return null;
 }
 
@@ -419,6 +427,10 @@ bot.on("message", async (ctx) => {
     updateContext(userMessage);
 
     const response = await generateResponse(ctx.chat.id, userMessage);
+
+    if (!response) {
+      throw new Error("No response generated");
+    }
 
     if (userMessage.toLowerCase().includes("eva") && !botMemory.mentionedEva.includes(userMessage)) {
       botMemory.mentionedEva.push(userMessage);
