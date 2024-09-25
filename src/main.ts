@@ -1,6 +1,6 @@
 import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts";
 import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
-import { useDB } from './utils/db.ts';
+import { useDB, Message } from './utils/db.ts';
 import "https://deno.land/std@0.177.0/dotenv/load.ts";
 import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.19.0";
 
@@ -201,8 +201,8 @@ function fillTemplate(template: string, topic: string) {
   return template.replace(":topic", topic);
 }
 
-async function getTopicResponse(topic: string): Promise<string> {
-  const topicResponses = await getTopicResponses();
+async function getTopicResponse(chatId: number, topic: string): Promise<string> {
+  const topicResponses = await getTopicResponses(chatId);
   const responses = topicResponses[topic] || [];
 
   if (responses.length > 0) {
@@ -256,7 +256,7 @@ function adjustLevelByEmotion(level: number, emotion: Emotion): number {
   return Math.max(0, Math.min(10, level + adjustments[emotion]));
 }
 
-async function generateCustomPrompt(botName: string, latestUserMessage: string) {
+async function generateCustomPrompt(chatId: number, botName: string, latestUserMessage: string) {
   const trait = personalityTraits[Math.floor(Math.random() * personalityTraits.length)];
   const topPerformance = Object.entries(botMemory.userPerformance)
     .sort(([, a], [, b]) => b - a)
@@ -265,10 +265,10 @@ async function generateCustomPrompt(botName: string, latestUserMessage: string) 
     .join(", ");
 
   const tsunderePhrase = getTsunderePhrase(tsundereLevel, currentEmotion);
-  const topicResponse = await getTopicResponse(context.topic);
+  const topicResponse = await getTopicResponse(chatId, context.topic);
 
   // Get all topic responses from the database
-  const allTopicResponses = await getTopicResponses();
+  const allTopicResponses = await getTopicResponses(chatId);
   const topicResponsesString = Object.entries(allTopicResponses)
     .map(([topic, responses]) => `${topic}: ${responses.join(", ")}`)
     .join("\n");
@@ -371,7 +371,7 @@ bot.on("message", async (ctx) => {
     adjustTsundereLevel(userMessage);
     updateContext(userMessage);
 
-    const customPrompt = await generateCustomPrompt(ctx.me.first_name, userMessage);
+    const customPrompt = await generateCustomPrompt(ctx.chat.id, ctx.me.first_name, userMessage);
     let { temperature, presencePenalty, frequencyPenalty } = getAdjustedParameters();
 
     // Increase temperature slightly to encourage more diverse responses
@@ -437,7 +437,7 @@ bot.on("message", async (ctx) => {
 
     // Save the new response as a topic response if it's relevant
     if (context.topic !== "general") {
-      await saveTopicResponse(context.topic, message);
+      await saveTopicResponse(ctx.chat.id, context.topic, message);
     }
 
     saveMessages(ctx.chat.id, [
