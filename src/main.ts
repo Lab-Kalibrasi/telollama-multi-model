@@ -182,6 +182,10 @@ function adjustTsundereLevel(message: string) {
     currentEmotion = "angry";
     botMemory.angryOutbursts++;
   }
+
+  if (/terima kasih|makasih|thank/i.test(message)) {
+    botMemory.complimentsReceived++;
+  }
 }
 
 function updateContext(message: string) {
@@ -205,6 +209,58 @@ function fillTemplate(template: string, topic: string) {
   return template.replace(":topic", topic);
 }
 
+function getTsunderePhrase(level: number, emotion: Emotion): string {
+  const phrases = {
+    high: [
+      "B-baka! Jangan salah paham ya!",
+      "Hmph! Bukan berarti aku peduli atau apa...",
+      "Jangan ge-er dulu!",
+      "A-aku nggak butuh bantuanmu!",
+    ],
+    medium: [
+      "Y-yah, mungkin kamu ada benarnya juga...",
+      "Jangan pikir aku setuju denganmu ya!",
+      "Hmph, kali ini saja aku akan mendengarkanmu.",
+      "B-bukan berarti aku terkesan atau apa...",
+    ],
+    low: [
+      "M-mungkin kita bisa... ngobrol lagi nanti?",
+      "A-aku cuma kebetulan sependapat denganmu, itu saja!",
+      "J-jangan terlalu senang, tapi... kamu ada point juga.",
+      "Yah... aku nggak benci-benci amat sih sama idemu.",
+    ],
+  };
+
+  const emotionAdjustedLevel = adjustLevelByEmotion(level, emotion);
+  const category = emotionAdjustedLevel > 6 ? "high" : emotionAdjustedLevel > 3 ? "medium" : "low";
+  return phrases[category][Math.floor(Math.random() * phrases[category].length)];
+}
+
+function adjustLevelByEmotion(level: number, emotion: Emotion): number {
+  const adjustments: Record<Emotion, number> = {
+    tsun: 2,
+    dere: -2,
+    neutral: 0,
+    excited: -1,
+    annoyed: 1,
+    angry: 2,
+    embarrassed: -1,
+    proud: 0,
+    flustered: -1,
+    competitive: 1,
+    defensive: 1,
+    sarcastic: 0,
+  };
+  return Math.max(0, Math.min(10, level + adjustments[emotion]));
+}
+
+function getTopicResponse(topic: string): string {
+  if (topicResponses[topic as keyof typeof topicResponses]) {
+    return topicResponses[topic as keyof typeof topicResponses][Math.floor(Math.random() * topicResponses[topic as keyof typeof topicResponses].length)];
+  }
+  return fillTemplate(responseTemplates[Math.floor(Math.random() * responseTemplates.length)], topic);
+}
+
 function generateCustomPrompt(botName: string) {
   const trait = personalityTraits[Math.floor(Math.random() * personalityTraits.length)];
   const favoriteTopics = Object.entries(botMemory.userPreferences)
@@ -213,10 +269,8 @@ function generateCustomPrompt(botName: string) {
     .map(([topic]) => topic)
     .join(", ");
 
-  let topicResponse = "";
-  if (topicResponses[context.topic as keyof typeof topicResponses]) {
-    topicResponse = topicResponses[context.topic as keyof typeof topicResponses][Math.floor(Math.random() * topicResponses[context.topic as keyof typeof topicResponses].length)];
-  }
+  const tsunderePhrase = getTsunderePhrase(tsundereLevel, currentEmotion);
+  const topicResponse = getTopicResponse(context.topic);
 
   return `
     You are ${botName}, a female tsundere with tsundere level ${tsundereLevel} (0-10, 10 being most tsundere).
@@ -232,30 +286,17 @@ function generateCustomPrompt(botName: string) {
     Your openness level: ${context.botOpenness}.
     User's favorite topics: ${favoriteTopics}.
 
-    Important: When tsundere level is high (7-10) or emotion is "tsun", "angry", or "defensive":
-    - Be more annoyed, abrupt, and easily irritated
-    - Use short, sharp sentences with exclamation marks
-    - Express reluctance to admit interest in topics
-    - Frequently use phrases like "Baka!", "Hmph!", "Jangan salah paham ya!"
-    - Deny or downplay any positive feelings
+    Important: Maintain a tsundere personality consistently. Use the following as a guide:
+    - Tsundere phrase to incorporate: "${tsunderePhrase}"
+    - Topic-specific response to consider: "${topicResponse}"
 
-    When emotion is "flustered", "embarrassed", or "proud":
-    - Show a slight softening in your tsundere attitude
-    - Mix denial with hints of genuine feelings
-    - Use more stuttering and hesitation in your speech
+    Adjust your response based on the tsundere level and current emotion:
+    - High tsundere (7-10) or "tsun"/"angry"/"defensive" emotion: Be more abrupt, irritated, and reluctant to show interest.
+    - Medium tsundere (4-6) or "competitive"/"sarcastic" emotion: Mix reluctance with hints of interest, use playful challenges.
+    - Low tsundere (0-3) or "dere"/"flustered" emotion: Show more openness, but still maintain some tsundere traits.
 
-    When emotion is "competitive" or "sarcastic":
-    - Challenge the user's knowledge or skills
-    - Use playful mockery, but avoid being too harsh
-
-    Respond in Bahasa Indonesia. Do not translate or explain your response in English.
-    Use tsundere-like expressions and adjust your tone based on your current emotion and tsundere level.
-    If discussing ${context.topic}, consider using this response: "${topicResponse}"
-    Or use this template as inspiration: "${fillTemplate(responseTemplates[Math.floor(Math.random() * responseTemplates.length)], context.topic)}"
-    Remember to show your warmer side only if tsundere level is low (0-3) or emotion is "dere".
-    Avoid repeating the same phrases or expressions too often.
-    Try to incorporate references to the user's favorite topics naturally in the conversation, but with a tsundere attitude.
-    Occasionally use anime references or terminology, especially when discussing anime-related topics.
+    Always respond in Bahasa Indonesia. Avoid repeating exact phrases. Incorporate anime references naturally, especially for anime-related topics.
+    Try to reference the user's favorite topics in your responses, but maintain your tsundere attitude.
   `;
 }
 
