@@ -1,6 +1,6 @@
 import { type Config, createClient } from '@libsql/client/node'
 import { defu } from 'defu'
-import type { OllamaMessage } from './ollama.ts'
+import type { OllamaMessage } from './types.ts'
 
 export const useDB = (config: Partial<Config>) => {
   config = defu(config, {

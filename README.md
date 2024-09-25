@@ -1,60 +1,68 @@
-
 # Telollama
 
-Telollama is a fun Telegram bot project built with [Deno](https://deno.land) and utilizes [Ollama](https://ollama.ai) to enhance its functionality. The bot is designed for entertainment and interactive conversations with Telegram users, using the default Ollama model `gemma2:2b`.
+Telollama is an engaging Telegram bot project built with [Deno](https://deno.land) that now utilizes [OpenRouter](https://openrouter.ai/) to access various AI models. The bot embodies a tsundere personality, making for fun and dynamic conversations with Telegram users.
 
 ## Features
 
-- 🤖 **Telegram Bot Integration**: Connects seamlessly with Telegram using [Telegram Bot API](https://core.telegram.org/bots/api).
-- 💬 **Ollama AI Integration**: Uses Ollama for generating fun and intelligent responses.
+- 🤖 **Telegram Bot Integration**: Seamlessly connects with Telegram using [Telegram Bot API](https://core.telegram.org/bots/api).
+- 🧠 **Multiple AI Models**: Utilizes OpenRouter to access various AI models, including Meta's Llama, Mistral AI, and Google's Gemma.
+- 😳 **Tsundere Personality**: Implements a dynamic tsundere personality that evolves throughout the conversation.
+- 🎭 **Emotion System**: Features an emotion system that affects the bot's responses.
+- 🧬 **Context-Aware Responses**: Maintains conversation context for more coherent interactions.
+- 💾 **Memory System**: Remembers key points from earlier in the conversation.
+- 🇮🇩 **Bahasa Indonesia**: Responds in Bahasa Indonesia, catering to Indonesian users.
 
 ## Installation
 
 1. Clone this repository:
 
    ```bash
-   git clone https://github.com/radyakaze/telollama.git
-   cd telollama
+   git clone https://github.com/ceroberoz/telollama-multi-model.git
+   cd telollama-multi-model
    ```
 
 2. Create a new Telegram bot using [BotFather](https://t.me/botfather).
 
-  - Open [BotFather](https://t.me/botfather) on Telegram.
-  - Follow the instructions to create a new bot and get your bot token.
+   - Open [BotFather](https://t.me/botfather) on Telegram.
+   - Follow the instructions to create a new bot and get your bot token.
 
-3. Set up your environment variables by creating a `.env` file and adding your Telegram bot token and Ollama model (optional):
+3. Set up your environment variables by creating a `.env` file:
 
    ```env
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-   OLLAMA_MODEL=gemma2:2b  # Change this to use a different Ollama model
+   OPENROUTER_API_KEY=your_openrouter_api_key
+   DATABASE_URL=your_database_url
+   DATABASE_API_TOKEN=your_database_api_token
+   YOUR_SITE_URL=your_site_url
+   YOUR_SITE_NAME=your_site_name
    ```
 
 4. Start the bot in development mode:
 
    ```bash
-   deno task dev
+   deno run -A --unstable-kv ./src/main.ts
    ```
 
 ## Usage
 
-Just chat with the bot—have fun and enjoy the AI-powered responses! Hehe 😄
+Simply start a chat with the bot on Telegram. The bot will respond with a tsundere personality, gradually warming up as the conversation progresses. It can discuss topics like anime and coding, adapting its responses based on the context of the conversation.
 
-## Changing the Ollama Model
+## AI Models
 
-To change the default Ollama model, modify the `OLLAMA_MODEL` variable in your `.env` file. For example:
+The bot uses the following models through OpenRouter:
 
-```env
-OLLAMA_MODEL=another_model_name
-```
+- Meta's Llama (llama-3-8b-instruct)
+- Mistral AI (mistral-7b-instruct)
+- Google's Gemma (gemma-2-9b-it)
 
-This allows you to experiment with different AI models depending on your use case.
-
+The bot automatically selects an available model for each interaction.
 
 ## Technologies Used
 
 - [Deno](https://deno.land/) - A modern runtime for JavaScript and TypeScript
 - [Telegram Bot API](https://core.telegram.org/bots/api) - For creating the bot
-- [Ollama AI](https://ollama.ai) - AI platform using the `gemma2:2b` model for generating responses
+- [OpenRouter](https://openrouter.ai/) - For accessing various AI models
+- [Turso](https://turso.tech/) - For database storage
 
 ## Contributing
 
