@@ -57,12 +57,6 @@ function setupBotHandlers() {
       adjustTsundereLevel(userMessage);
       updateContext(userMessage);
 
-      console.log("Generating response...");
-      let response = await generateResponse(ctx.chat.id, userMessage);
-      console.log(`Generated response: "${response}"`);
-
-      await sendResponseWithRetry(ctx, response);
-
       messageQueue.push({ chatId: ctx.chat.id, userMessage, ctx });
       processQueue();
 
@@ -81,23 +75,8 @@ function setupBotHandlers() {
         { role: "user", content: userMessage },
       ]);
 
-      const workingModel = await getWorkingModel();
-      const summary = generateConversationSummary();
-      console.log({
-        chat_id: ctx.chat.id,
-        user_name: ctx.update.message.from.username || "",
-        full_name: ctx.update.message.from.first_name || "",
-        user_message: userMessage,
-        bot_response: response,
-        model_used: workingModel,
-        current_emotion: currentEmotion,
-        tsundere_level: tsundereLevel,
-        context: context,
-        summary: summary,
-      });
     } catch (error) {
       console.error("Error in message processing:", error);
-      await sendResponseWithRetry(ctx, getFallbackResponse());
     }
   });
 }
@@ -110,6 +89,30 @@ async function streamResponse(ctx: any, chatId: number, userMessage: string) {
     const response = await generateResponseWithTimeout(chatId, userMessage, 30000);
     await sendResponseWithRetry(ctx, response);
     console.log(`Response sent for chat ${chatId}`);
+
+    const workingModel = await getWorkingModel();
+    const summary = generateConversationSummary();
+
+    const outputSummary = {
+      chat_id: chatId,
+      user_name: ctx.update.message.from.username || "",
+      full_name: ctx.update.message.from.first_name || "",
+      user_message: userMessage,
+      bot_response: response,
+      model_used: workingModel,
+      current_emotion: currentEmotion,
+      tsundere_level: tsundereLevel,
+      context: {
+        topic: context.topic,
+        userInterestLevel: context.userInterestLevel,
+        botConfidenceLevel: context.botConfidenceLevel,
+        recentTopics: context.recentTopics,
+        pilotingPerformance: context.pilotingPerformance
+      },
+      summary: summary
+    };
+
+    console.log(JSON.stringify(outputSummary, null, 2));
   } catch (error) {
     console.error("Error generating streaming response:", error);
     await sendResponseWithRetry(ctx, getFallbackResponse());
@@ -173,25 +176,24 @@ async function generateResponseWithTimeout(chatId: number, userMessage: string, 
   }
 }
 
-function generateConversationSummary(): string {
+function generateConversationSummary(): object {
   const topPerformance = Object.entries(botMemory.userPerformance)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 3)
-    .map(([topic]) => topic)
-    .join(", ");
+    .map(([topic]) => topic);
 
-  return `
-    Topic: ${context.topic}
-    Recent topics: ${context.recentTopics.join(", ")}
-    User interest: ${context.userInterestLevel}
-    Bot confidence: ${context.botConfidenceLevel}
-    Piloting performance: ${context.pilotingPerformance}
-    Top performance areas: ${topPerformance}
-    Compliments received: ${botMemory.complimentsReceived}
-    Insults received: ${botMemory.insults}
-    Eva references: ${botMemory.mentionedEva.length}
-    Piloting skills mentioned: ${botMemory.mentionedPilotingSkills.length}
-  `.trim();
+  return {
+    topic: context.topic,
+    recentTopics: context.recentTopics,
+    userInterest: context.userInterestLevel,
+    botConfidence: context.botConfidenceLevel,
+    pilotingPerformance: context.pilotingPerformance,
+    topPerformanceAreas: topPerformance,
+    complimentsReceived: botMemory.complimentsReceived,
+    insultsReceived: botMemory.insults,
+    evaReferences: botMemory.mentionedEva.length,
+    pilotingSkillsMentioned: botMemory.mentionedPilotingSkills.length
+  };
 }
 
 export const handleUpdate = (req: Request) => {
