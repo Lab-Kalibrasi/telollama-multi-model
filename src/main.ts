@@ -4,7 +4,7 @@ import { useDB, Message } from './utils/db.ts';
 import { load } from "https://deno.land/std@0.177.0/dotenv/mod.ts";
 import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "https://esm.sh/@google/generative-ai@0.19.0";
 import { delay } from "https://deno.land/std@0.177.0/async/delay.ts";
-import { streamValues } from "https://deno.land/x/stream_json@v0.1.1/mod.ts";
+// import { streamValues } from "https://deno.land/x/stream_json@v0.1.1/mod.ts";
 
 await load({ export: true });
 
@@ -515,31 +515,33 @@ const messageQueue: Array<{ chatId: number; userMessage: string; ctx: any }> = [
 let isProcessing = false;
 
 async function streamResponse(ctx: any, chatId: number, userMessage: string) {
-  const stream = new TransformStream();
-  const writer = stream.writable.getWriter();
-  const encoder = new TextEncoder();
+  try {
+    const response = await generateResponseWithTimeout(chatId, userMessage, 30000);
+    await ctx.reply(response);
+    console.log(`Response sent for chat ${chatId}`);
+  } catch (error) {
+    console.error("Error generating streaming response:", error);
+    await ctx.reply(getFallbackResponse());
+  }
+}
 
-  // Start sending the response immediately
-  ctx.reply({
-    type: 'chat_action',
-    action: 'typing'
-  });
+async function processQueue() {
+  if (isProcessing) return;
+  isProcessing = true;
 
-  (async () => {
+  while (messageQueue.length > 0) {
+    const { chatId, userMessage, ctx } = messageQueue.shift()!;
     try {
-      const response = await generateResponseWithTimeout(chatId, userMessage, 30000);
-      await writer.write(encoder.encode(response));
+      console.log(`Processing message for chat ${chatId}: ${userMessage}`);
+      await streamResponse(ctx, chatId, userMessage);
     } catch (error) {
-      console.error("Error generating streaming response:", error);
-      await writer.write(encoder.encode(getFallbackResponse()));
-    } finally {
-      await writer.close();
+      console.error(`Error processing message for chat ${chatId}:`, error);
+      await sendResponseWithRetry(ctx, getFallbackResponse());
     }
-  })();
+    await delay(1000);
+  }
 
-  return new Response(stream.readable, {
-    headers: { 'Content-Type': 'text/plain' },
-  });
+  isProcessing = false;
 }
 
 async function processQueue() {
