@@ -17,28 +17,28 @@ import {
   Memory
 } from './ai.ts';
 
-// Load environment variables from .env file, allowing empty values
+// Load environment variables
 await load({ export: true, allowEmptyValues: true });
 
-console.log("TELEGRAM_BOT_TOKEN:", Deno.env.get("TELEGRAM_BOT_TOKEN"));
-console.log("OPENROUTER_API_KEY:", Deno.env.get("OPENROUTER_API_KEY"));
-console.log("GOOGLE_AI_API_KEY:", Deno.env.get("GOOGLE_AI_API_KEY"));
+// Log some environment variables to verify they're loaded correctly
+console.log("TELEGRAM_BOT_TOKEN:", Deno.env.get("TELEGRAM_BOT_TOKEN")?.substring(0, 10) + "...");
+console.log("OPENROUTER_API_KEY:", Deno.env.get("OPENROUTER_API_KEY")?.substring(0, 10) + "...");
+console.log("OPENROUTER_API_KEY_B:", Deno.env.get("OPENROUTER_API_KEY_A")?.substring(0, 10) + "...");
+console.log("OPENROUTER_API_KEY_A:", Deno.env.get("OPENROUTER_API_KEY_B")?.substring(0, 10) + "...");
+console.log("GOOGLE_AI_API_KEY:", Deno.env.get("GOOGLE_AI_API_KEY")?.substring(0, 10) + "...");
 console.log("YOUR_SITE_URL:", Deno.env.get("YOUR_SITE_URL"));
 console.log("DATABASE_URL:", Deno.env.get("DATABASE_URL"));
-console.log("Environment variables loaded successfully.");
 
-// Check if TELEGRAM_BOT_TOKEN is set
 const TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
 if (!TOKEN) {
   console.error("ERROR: TELEGRAM_BOT_TOKEN is not set in the .env file or environment variables.");
   Deno.exit(1);
 }
 
-console.log("TELEGRAM_BOT_TOKEN is set.");
-
-// Initialize the bot with the token
+// Initialize the bot
 initializeBot(TOKEN);
 
+// Start the server
 Deno.serve(async (req) => {
   if (req.method === "GET" && new URL(req.url).pathname === "/ping") {
     return new Response("pong", { status: 200 });
@@ -54,14 +54,6 @@ Deno.serve(async (req) => {
       }
     }
   }
-
-  // Log some information about the current state
-  console.log({
-    currentEmotion,
-    tsundereLevel,
-    context,
-    botMemory
-  });
 
   return new Response("Not found", { status: 404 });
 });

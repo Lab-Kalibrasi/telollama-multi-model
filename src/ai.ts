@@ -61,7 +61,7 @@ const responseTemplates = [
 ];
 
 const openai = new OpenAI({
-  apiKey: apiKey || "",
+  apiKey: apiKeys || "",
   baseURL: "https://openrouter.ai/api/v1",
   defaultHeaders: {
     "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "http://localhost",

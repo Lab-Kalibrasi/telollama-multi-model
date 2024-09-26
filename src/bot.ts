@@ -21,18 +21,20 @@ export function initializeBot(token: string) {
 }
 
 function setupBotHandlers() {
-  bot.command("start", (ctx) => {
+  bot.command("start", async (ctx) => {
     const greeting = "Hah! Kamu pikir bisa jadi pilot EVA? Jangan membuatku tertawa!";
-    saveMessages(ctx.chat.id, [{ role: "assistant", content: greeting }]);
-    ctx.reply(greeting);
+    await saveMessages(ctx.chat.id, [{ role: "assistant", content: greeting }]);
+    await ctx.reply(greeting);
   });
 
   bot.on("message", async (ctx) => {
+    console.log("Received message from chat ID:", ctx.chat.id);
+
     if (ctx.update.message.chat.type !== "private") return;
 
-    bot.api.sendChatAction(ctx.chat.id, "typing");
-
     try {
+      await bot.api.sendChatAction(ctx.chat.id, "typing");
+
       const userMessage = ctx.update.message.text || "";
       updateEmotion(userMessage);
       adjustTsundereLevel(userMessage);
@@ -52,23 +54,24 @@ function setupBotHandlers() {
         await saveTopicResponse(ctx.chat.id, context.topic, userMessage);
       }
 
-      saveMessages(ctx.chat.id, [
+      await saveMessages(ctx.chat.id, [
         { role: "user", content: userMessage },
       ]);
 
+      const workingModel = await getWorkingModel();
       console.log({
         chat_id: ctx.chat.id,
         user_name: ctx.update.message.from.username || "",
         full_name: ctx.update.message.from.first_name || "",
         message: userMessage,
-        model_used: await getWorkingModel(),
+        model_used: workingModel,
         current_emotion: context.currentEmotion,
         tsundere_level: context.tsundereLevel,
         context: context,
       });
     } catch (error) {
       console.error("Error in message processing:", error);
-      ctx.reply(getFallbackResponse()).catch(console.error);
+      await sendResponseWithRetry(ctx, getFallbackResponse());
     }
   });
 }
@@ -79,11 +82,11 @@ let isProcessing = false;
 async function streamResponse(ctx: any, chatId: number, userMessage: string) {
   try {
     const response = await generateResponseWithTimeout(chatId, userMessage, 30000);
-    await ctx.reply(response);
+    await sendResponseWithRetry(ctx, response);
     console.log(`Response sent for chat ${chatId}`);
   } catch (error) {
     console.error("Error generating streaming response:", error);
-    await ctx.reply(getFallbackResponse());
+    await sendResponseWithRetry(ctx, getFallbackResponse());
   }
 }
 
@@ -112,13 +115,20 @@ async function sendResponseWithRetry(ctx: any, response: string, maxRetries = 3)
       await ctx.reply(response);
       return;
     } catch (error) {
-      if (error instanceof GrammyError || error instanceof HttpError) {
-        console.error(`Attempt ${i + 1} failed to send message:`, error);
-        if (i === maxRetries - 1) throw error;
-        await delay(1000 * Math.pow(2, i));
+      if (error instanceof GrammyError) {
+        console.error(`Attempt ${i + 1} failed to send message:`, error.description);
+        if (error.description === "Bad Request: chat not found") {
+          console.error(`Chat not found. Chat ID: ${ctx.chat.id}`);
+          return; // Stop retrying if the chat is not found
+        }
+      } else if (error instanceof HttpError) {
+        console.error(`Attempt ${i + 1} failed due to network error:`, error);
       } else {
-        throw error;
+        console.error(`Attempt ${i + 1} failed due to unexpected error:`, error);
       }
+
+      if (i === maxRetries - 1) throw error;
+      await delay(1000 * Math.pow(2, i));
     }
   }
 }
