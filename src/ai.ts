@@ -11,6 +11,9 @@ const apiKeys = [
   Deno.env.get("OPENROUTER_API_KEY_B") || "",
 ].filter(key => key !== "");
 
+const googleAI = new GoogleGenerativeAI(Deno.env.get("GOOGLE_AI_API_KEY") || "");
+console.log("Google AI API Key:", Deno.env.get("GOOGLE_AI_API_KEY")?.substring(0, 5) + "...");
+
 const personalityTraits = [
   "Fiercely competitive",
   "Struggles with self-worth",
@@ -189,8 +192,6 @@ const openai = new OpenAI({
   },
 });
 
-const googleAI = new GoogleGenerativeAI(Deno.env.get("GOOGLE_AI_API_KEY") || "");
-
 const safetySettings = [
   {
     category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -265,21 +266,26 @@ const modelAdapters = {
     return completion.choices[0].message.content || "";
   },
   "google/gemini-pro": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
-    const generativeModel = googleAI.getGenerativeModel({
-      model: "gemini-pro",
-      safetySettings: safetySettings
-    });
-    const result = await generativeModel.generateContent({
-      contents: [
-        { role: "user", parts: [{ text: prompt }] },
-        ...messages.map(msg => ({
-          role: msg.role === "assistant" ? "model" : "user",
-          parts: [{ text: msg.content }]
-        })),
-      ],
-    });
-    return result.response.text();
-  },
+       try {
+         const generativeModel = googleAI.getGenerativeModel({
+           model: "gemini-pro",
+           safetySettings: safetySettings
+         });
+         const result = await generativeModel.generateContent({
+           contents: [
+             { role: "user", parts: [{ text: prompt }] },
+             ...messages.map(msg => ({
+               role: msg.role === "assistant" ? "model" : "user",
+               parts: [{ text: msg.content }]
+             })),
+           ],
+         });
+         return result.response.text();
+       } catch (error) {
+         console.error("Error in Gemini API call:", error);
+         throw error;
+       }
+     },
   "local/ollama": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
     const ollama = useOllama({ model: "llama3.2" });
 
@@ -311,31 +317,29 @@ async function healthCheck(model: string, apiKey?: string): Promise<boolean> {
   }
 }
 
-export async function getWorkingModel(): Promise<string | null> {
+async function rotateApiKeys(model: string, apiKeys: string[]): Promise<string | null> {
+  for (const apiKey of apiKeys) {
+    try {
+      console.log(`Attempting to use model: ${model} with key: ${apiKey.substr(0, 5)}...`);
+      if (await retryOperation(() => healthCheck(model, apiKey))) {
+        console.log(`Successfully connected to model: ${model}`);
+        return apiKey;
+      }
+    } catch (error) {
+      console.error(`Error with model ${model} and key ${apiKey.substr(0, 5)}...:`, error.message);
+    }
+  }
+  return null;
+}
+
+export async function getWorkingModel(): Promise<[string, string] | null> {
   const errors: Record<string, string> = {};
 
   // Try OpenRouter models first
-  for (let modelAttempt = 0; modelAttempt < openRouterModels.length * apiKeys.length; modelAttempt++) {
-    const model = openRouterModels[currentOpenRouterModelIndex];
-    const apiKey = apiKeys[currentKeyIndex];
-
-    try {
-      console.log(`Attempting to use OpenRouter model: ${model} with key: ${apiKey.substr(0, 5)}...`);
-      if (await retryOperation(() => healthCheck(model, apiKey))) {
-        console.log(`Successfully connected to model: ${model}`);
-        return model;
-      }
-    } catch (error) {
-      console.error(`Error with OpenRouter model ${model} and key ${apiKey.substr(0, 5)}...:`, error.message);
-      errors[`${model}-${apiKey.substr(0, 5)}`] = error.message;
-    }
-
-    // Move to the next API key
-    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
-
-    // If we've tried all keys for this model, move to the next model
-    if (currentKeyIndex === 0) {
-      currentOpenRouterModelIndex = (currentOpenRouterModelIndex + 1) % openRouterModels.length;
+  for (const model of openRouterModels) {
+    const workingKey = await rotateApiKeys(model, apiKeys);
+    if (workingKey) {
+      return [model, workingKey];
     }
   }
 
@@ -345,7 +349,7 @@ export async function getWorkingModel(): Promise<string | null> {
       console.log(`Attempting to use fallback model: ${model}`);
       if (await retryOperation(() => healthCheck(model))) {
         console.log(`Successfully connected to fallback model: ${model}`);
-        return model;
+        return [model, ""]; // Empty string for API key as fallback models might not need it
       }
     } catch (error) {
       console.error(`Error with fallback model ${model}:`, error.message);
@@ -353,8 +357,7 @@ export async function getWorkingModel(): Promise<string | null> {
     }
   }
 
-  console.error("All models failed. Errors:", errors);
-  return null;
+  console.error("All models failed. Errors:", JSON.stringify(errors, null, 2));
 }
 
 const conversationContexts: Record<number, ConversationContext> = {};
@@ -362,6 +365,8 @@ const conversationContexts: Record<number, ConversationContext> = {};
 export async function generateResponse(chatId: number, userMessage: string): Promise<string> {
   const start = performance.now();
   let workingModel: string | null = null;
+  let apiKey: string | null = null;
+
   try {
     console.log('Starting generateResponse');
     const [messages, customPrompt] = await Promise.all([
@@ -379,12 +384,13 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
     adjustTsundereLevel(userMessage);
     updateContext(userMessage);
 
-    workingModel = await getWorkingModel();
-    if (!workingModel) {
+    const modelAndKey = await getWorkingModel();
+    if (!modelAndKey) {
       console.error("No working model available, using fallback response");
       return getFallbackResponse();
     }
 
+    [workingModel, apiKey] = modelAndKey;
     const adapter = modelAdapters[workingModel];
     if (!adapter) {
       throw new Error(`No adapter available for model: ${workingModel}`);
@@ -408,7 +414,7 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
       } else {
         const maxTokens = getAdaptiveMaxTokens(userMessage.length);
         response = await retryOperation(() =>
-          adapter(messages.slice(-5), fullPrompt, openRouterModels.includes(workingModel) ? apiKeys[currentKeyIndex] : "", maxTokens)
+          adapter(messages.slice(-5), fullPrompt, apiKey || "", maxTokens)
         );
       }
     }
@@ -427,6 +433,40 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
       response += ` Ngomong-ngomong, apa pendapatmu tentang ${suggestedTopic}?`;
     }
 
+    const safeApiKeyIdentifier = getApiKeyIdentifier(apiKey || "");
+
+    const responseObject = {
+      chat_id: chatId,
+      user_name: "",
+      full_name: "",
+      user_message: userMessage,
+      bot_response: response,
+      model_used: openRouterModels.includes(workingModel)
+        ? [workingModel, safeApiKeyIdentifier, "PRIMARY_MODEL"]
+        : fallbackModels.includes(workingModel)
+          ? [workingModel, "FALLBACK_MODEL"]
+          : [workingModel, "UNKNOWN_MODEL"],
+      current_emotion: currentEmotion,
+      tsundere_level: tsundereLevel,
+      context: {
+        topic: context.topic,
+        userInterestLevel: context.userInterestLevel,
+        botConfidenceLevel: context.botConfidenceLevel,
+        recentTopics: context.recentTopics,
+        pilotingPerformance: context.pilotingPerformance,
+        topPerformanceAreas: Object.entries(botMemory.userPerformance)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 3)
+          .map(([topic]) => topic),
+        complimentsReceived: botMemory.complimentsReceived,
+        insultsReceived: botMemory.insults,
+        evaReferences: botMemory.mentionedEva.length,
+        pilotingSkillsMentioned: botMemory.mentionedPilotingSkills.length
+      }
+    };
+
+    console.log('Response object:', responseObject);
+
     return response;
   } catch (error) {
     console.error(`Error in generateResponse (model: ${workingModel}):`, error);
@@ -434,6 +474,13 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
   } finally {
     console.log('generateResponse completed in', performance.now() - start, 'ms');
   }
+}
+
+export function getApiKeyIdentifier(apiKey: string): string {
+  if (apiKey === Deno.env.get("OPENROUTER_API_KEY")) return "OPENROUTER_API_KEY";
+  if (apiKey === Deno.env.get("OPENROUTER_API_KEY_A")) return "OPENROUTER_API_KEY_A";
+  if (apiKey === Deno.env.get("OPENROUTER_API_KEY_B")) return "OPENROUTER_API_KEY_B";
+  return "UNKNOWN_KEY";
 }
 
 export function updateEmotion(message: string) {

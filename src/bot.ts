@@ -6,12 +6,9 @@ import {
   updateEmotion,
   adjustTsundereLevel,
   updateContext,
-  getWorkingModel,
   getFallbackResponse,
   context,
   botMemory,
-  currentEmotion,
-  tsundereLevel
 } from './ai.ts';
 import { saveMessages, saveTopicResponse } from './utils/db.ts';
 
@@ -89,18 +86,6 @@ async function streamResponse(ctx: any, chatId: number, userMessage: string) {
     const response = await generateResponseWithTimeout(chatId, userMessage, 30000);
     await sendResponseWithRetry(ctx, response);
     console.log(`Response sent for chat ${chatId}`);
-
-    const workingModel = await getWorkingModel();
-    const summary = generateConversationSummary(
-      chatId,
-      ctx.update.message.from.username || "",
-      ctx.update.message.from.first_name || "",
-      userMessage,
-      response,
-      workingModel
-    );
-
-    console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     console.error("Error generating streaming response:", error);
     await sendResponseWithRetry(ctx, getFallbackResponse());
@@ -162,36 +147,6 @@ async function generateResponseWithTimeout(chatId: number, userMessage: string, 
     console.error("Error generating response:", error);
     return getFallbackResponse();
   }
-}
-
-function generateConversationSummary(chatId: number, userName: string, fullName: string, userMessage: string, response: string, workingModel: string | null): object {
-  const topPerformance = Object.entries(botMemory.userPerformance)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 3)
-    .map(([topic]) => topic);
-
-  return {
-    chat_id: chatId,
-    user_name: userName,
-    full_name: fullName,
-    user_message: userMessage,
-    bot_response: response,
-    model_used: workingModel,
-    current_emotion: currentEmotion,
-    tsundere_level: tsundereLevel,
-    context: {
-      topic: context.topic,
-      userInterestLevel: context.userInterestLevel,
-      botConfidenceLevel: context.botConfidenceLevel,
-      recentTopics: context.recentTopics,
-      pilotingPerformance: context.pilotingPerformance,
-      topPerformanceAreas: topPerformance,
-      complimentsReceived: botMemory.complimentsReceived,
-      insultsReceived: botMemory.insults,
-      evaReferences: botMemory.mentionedEva.length,
-      pilotingSkillsMentioned: botMemory.mentionedPilotingSkills.length
-    }
-  };
 }
 
 export const handleUpdate = (req: Request) => {
