@@ -82,6 +82,7 @@ function setupBotHandlers() {
       ]);
 
       const workingModel = await getWorkingModel();
+      const summary = generateConversationSummary();
       console.log({
         chat_id: ctx.chat.id,
         user_name: ctx.update.message.from.username || "",
@@ -92,7 +93,8 @@ function setupBotHandlers() {
         current_emotion: currentEmotion,
         tsundere_level: tsundereLevel,
         context: context,
-    });
+        summary: summary,
+      });
     } catch (error) {
       console.error("Error in message processing:", error);
       await sendResponseWithRetry(ctx, getFallbackResponse());
@@ -169,6 +171,27 @@ async function generateResponseWithTimeout(chatId: number, userMessage: string, 
     console.error("Error generating response:", error);
     return getFallbackResponse();
   }
+}
+
+function generateConversationSummary(): string {
+  const topPerformance = Object.entries(botMemory.userPerformance)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([topic]) => topic)
+    .join(", ");
+
+  return `
+    Topic: ${context.topic}
+    Recent topics: ${context.recentTopics.join(", ")}
+    User interest: ${context.userInterestLevel}
+    Bot confidence: ${context.botConfidenceLevel}
+    Piloting performance: ${context.pilotingPerformance}
+    Top performance areas: ${topPerformance}
+    Compliments received: ${botMemory.complimentsReceived}
+    Insults received: ${botMemory.insults}
+    Eva references: ${botMemory.mentionedEva.length}
+    Piloting skills mentioned: ${botMemory.mentionedPilotingSkills.length}
+  `.trim();
 }
 
 export const handleUpdate = (req: Request) => {
