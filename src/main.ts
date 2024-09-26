@@ -1,4 +1,4 @@
-import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.20.4/mod.ts";
+import { Bot, webhookCallback, GrammyError, HttpError } from "https://deno.land/x/grammy@v1.20.4/mod.ts";
 import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
 import { useDB, Message } from './utils/db.ts';
 import { load } from "https://deno.land/std@0.177.0/dotenv/mod.ts";
@@ -520,20 +520,43 @@ async function processQueue() {
   while (messageQueue.length > 0) {
     const { chatId, userMessage, ctx } = messageQueue.shift()!;
     try {
+      console.log(`Processing message for chat ${chatId}: ${userMessage}`);
       let response = await getCachedResponse(chatId, userMessage);
       if (!response) {
-        response = await generateResponseWithTimeout(chatId, userMessage, 15000); // Increased timeout to 15 seconds
+        console.log(`Generating new response for chat ${chatId}`);
+        response = await generateResponseWithTimeout(chatId, userMessage, 15000);
         await setCachedResponse(chatId, userMessage, response);
+      } else {
+        console.log(`Using cached response for chat ${chatId}`);
       }
-      await ctx.reply(response);
+      console.log(`Response generated for chat ${chatId}: ${response}`);
+      await sendResponseWithRetry(ctx, response);
+      console.log(`Response sent successfully to chat ${chatId}`);
     } catch (error) {
-      console.error("Error processing message:", error);
-      await ctx.reply(getFallbackResponse());
+      console.error(`Error processing message for chat ${chatId}:`, error);
+      await sendResponseWithRetry(ctx, getFallbackResponse());
     }
-    await delay(1000); // Add a small delay between processing messages
+    await delay(1000);
   }
 
   isProcessing = false;
+}
+
+async function sendResponseWithRetry(ctx: any, response: string, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await ctx.reply(response);
+      return;
+    } catch (error) {
+      if (error instanceof GrammyError || error instanceof HttpError) {
+        console.error(`Attempt ${i + 1} failed to send message:`, error);
+        if (i === maxRetries - 1) throw error;
+        await delay(1000 * Math.pow(2, i));
+      } else {
+        throw error;
+      }
+    }
+  }
 }
 
 bot.command("start", (ctx) => {
@@ -554,7 +577,16 @@ bot.on("message", async (ctx) => {
     updateContext(userMessage);
 
     messageQueue.push({ chatId: ctx.chat.id, userMessage, ctx });
-    processQueue();
+
+    // Set a timeout for the entire message processing
+    const timeout = setTimeout(() => {
+      console.error(`Message processing timed out for chat ${ctx.chat.id}`);
+      ctx.reply(getFallbackResponse()).catch(console.error);
+    }, 20000); // 20 seconds timeout
+
+    await processQueue();
+
+    clearTimeout(timeout);
 
     if (userMessage.toLowerCase().includes("eva") && !botMemory.mentionedEva.includes(userMessage)) {
       botMemory.mentionedEva.push(userMessage);
@@ -583,7 +615,7 @@ bot.on("message", async (ctx) => {
     });
   } catch (error) {
     console.error("Error in message processing:", error);
-    ctx.reply(getFallbackResponse());
+    ctx.reply(getFallbackResponse()).catch(console.error);
   }
 });
 
