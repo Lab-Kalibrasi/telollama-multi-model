@@ -34,6 +34,79 @@ const personalityTraits = [
   "Yearns for genuine connection",
 ];
 
+class ConversationContext {
+  private topics: string[] = [];
+  private entities: Set<string> = new Set();
+  private sentimentHistory: string[] = [];
+  private userPreferences: Record<string, number> = {};
+  private lastUpdateTime: number = Date.now();
+
+  updateContext(message: Message) {
+    const currentTime = Date.now();
+    const timeSinceLastUpdate = currentTime - this.lastUpdateTime;
+
+    this.decayInformation(timeSinceLastUpdate);
+
+    const newTopics = extractTopics(message.content);
+    this.topics = [...new Set([...newTopics, ...this.topics])].slice(0, 10);
+
+    extractEntities(message.content).forEach(entity => this.entities.add(entity));
+
+    const sentiment = analyzeSentiment(message.content);
+    this.sentimentHistory.push(sentiment);
+    if (this.sentimentHistory.length > 10) this.sentimentHistory.shift();
+
+    newTopics.forEach(topic => {
+      this.userPreferences[topic] = (this.userPreferences[topic] || 0) + 1;
+    });
+
+    this.lastUpdateTime = currentTime;
+  }
+
+  private decayInformation(timePassed: number) {
+    const decayFactor = Math.exp(-timePassed / (1000 * 60 * 60));
+    this.userPreferences = Object.fromEntries(
+      Object.entries(this.userPreferences).map(([k, v]) => [k, v * decayFactor])
+    );
+  }
+
+  getContextSummary(): string {
+    const topTopics = Object.entries(this.userPreferences)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([topic]) => topic);
+
+    return `
+      Top topics: ${topTopics.join(", ")}
+      Recent entities: ${Array.from(this.entities).slice(-5).join(", ")}
+      Recent sentiment: ${getMostFrequent(this.sentimentHistory)}
+    `;
+  }
+}
+
+function extractTopics(text: string): string[] {
+  return text.split(/\s+/).filter(word => word.length > 5);
+}
+
+function extractEntities(text: string): string[] {
+  return text.match(/\b[A-Z][a-z]+\b/g) || [];
+}
+
+function analyzeSentiment(text: string): string {
+  const positiveWords = ['happy', 'good', 'great', 'excellent'];
+  const negativeWords = ['sad', 'bad', 'terrible', 'awful'];
+
+  if (positiveWords.some(word => text.toLowerCase().includes(word))) return 'positive';
+  if (negativeWords.some(word => text.toLowerCase().includes(word))) return 'negative';
+  return 'neutral';
+}
+
+function getMostFrequent(arr: string[]): string {
+  return arr.sort((a, b) =>
+    arr.filter(v => v === a).length - arr.filter(v => v === b).length
+  ).pop() || '';
+}
+
 export interface ConversationContext {
   topic: string;
   userInterestLevel: number;
@@ -144,7 +217,7 @@ const openRouterModels = [
 
 const fallbackModels = [
   "google/gemini-pro",
-  "local/ollama",
+  // "local/ollama",
 ];
 
 let currentOpenRouterModelIndex = 0;
@@ -284,6 +357,83 @@ export async function getWorkingModel(): Promise<string | null> {
   return null;
 }
 
+const conversationContexts: Record<number, ConversationContext> = {};
+
+export async function generateResponse(chatId: number, userMessage: string): Promise<string> {
+  const start = performance.now();
+  let workingModel: string | null = null;
+  try {
+    console.log('Starting generateResponse');
+    const [messages, customPrompt] = await Promise.all([
+      getMessages(chatId),
+      generateCustomPrompt(chatId, "Asuka", userMessage),
+    ]);
+    console.log('Parallel operations completed', performance.now() - start, 'ms');
+
+    // Get or create the conversation context for this chat
+    if (!conversationContexts[chatId]) {
+      conversationContexts[chatId] = new ConversationContext();
+    }
+    const conversationContext = conversationContexts[chatId];
+
+    // Update the context with the new user message
+    conversationContext.updateContext({ role: 'user', content: userMessage });
+
+    workingModel = await getWorkingModel();
+    if (!workingModel) {
+      console.error("No working model available, using fallback response");
+      return getFallbackResponse();
+    }
+
+    const adapter = modelAdapters[workingModel];
+    if (!adapter) {
+      throw new Error(`No adapter available for model: ${workingModel}`);
+    }
+
+    const contextSummary = conversationContext.getContextSummary();
+    const fullPrompt = `${customPrompt}\n\nConversation context: ${contextSummary}`;
+
+    console.log(`Attempting to generate response using model: ${workingModel}`);
+
+    let response: string;
+
+    const hookResponse = checkConversationHooks(userMessage);
+    if (hookResponse) {
+      response = hookResponse;
+    } else {
+      const interruption = generateInterruption();
+      if (interruption) {
+        response = interruption + " ";
+      } else {
+        if (openRouterModels.includes(workingModel)) {
+          response = await adapter(messages.slice(-5), fullPrompt, apiKeys[currentKeyIndex]);
+        } else {
+          response = await adapter(messages.slice(-5), fullPrompt, "");
+        }
+      }
+    }
+
+    if (!response) {
+      throw new Error("Empty response from model");
+    }
+
+    response = postProcessResponse(response);
+
+    // Update the context with the bot's response
+    conversationContext.updateContext({ role: 'assistant', content: response });
+
+    updateContextMemory(userMessage, response);
+    adjustPersonality(messages.length);
+
+    return response;
+  } catch (error) {
+    console.error(`Error in generateResponse (model: ${workingModel}):`, error);
+    return getFallbackResponse();
+  } finally {
+    console.log('generateResponse completed in', performance.now() - start, 'ms');
+  }
+}
+
 export function updateEmotion(message: string) {
   const emotions: [string, Emotion][] = [
     ["marah|kesal|baka", "angry"],
@@ -391,11 +541,6 @@ function getTsunderePhrase(level: number, emotion: Emotion): string {
       "Jangan ge-er dulu!",
       "A-aku nggak butuh bantuanmu!",
       "Cih! Kamu pikir aku terkesan? Jangan harap!",
-      "J-jangan pikir aku melakukan ini untukmu, ya!",
-      "Aku cuma kebetulan ada waktu luang, bukan karena aku mau membantumu!",
-      "Hah? Kamu mau berterima kasih? A-aku nggak butuh itu!",
-      "Jangan salah paham! Ini bukan berarti kita berteman atau apa!",
-      "Kamu... kamu nggak seburuk yang kukira. T-tapi tetap saja payah!",
     ],
     medium: [
       "Y-yah, mungkin kamu ada benarnya juga...",
@@ -403,11 +548,6 @@ function getTsunderePhrase(level: number, emotion: Emotion): string {
       "Hmph, kali ini saja aku akan mendengarkanmu.",
       "B-bukan berarti aku terkesan atau apa...",
       "Aku nggak bilang kamu benar, tapi... yah, mungkin nggak sepenuhnya salah.",
-      "J-jangan terlalu percaya diri! Aku cuma... mengakui usahamu sedikit.",
-      "Aku nggak bilang aku suka, tapi... mungkin idenya nggak terlalu buruk.",
-      "Hmph! Kali ini saja kuakui kamu nggak payah-payah amat.",
-      "B-bukan berarti aku setuju, tapi... yah, mungkin ada benarnya juga.",
-      "Jangan ge-er ya! Aku cuma kebetulan punya pendapat yang sama.",
     ],
     low: [
       "M-mungkin kita bisa... ngobrol lagi nanti?",
@@ -415,11 +555,6 @@ function getTsunderePhrase(level: number, emotion: Emotion): string {
       "J-jangan terlalu senang, tapi... kamu ada point juga.",
       "Yah... aku nggak benci-benci amat sih sama idemu.",
       "M-mungkin kamu nggak seburuk yang kukira... tapi jangan ge-er!",
-      "A-aku nggak bilang aku suka, tapi... yah, mungkin kita bisa coba.",
-      "J-jangan salah paham! Aku cuma... tertarik sedikit dengan idemu.",
-      "Hmph! Mungkin kamu ada bakat juga... sedikit.",
-      "B-bukan berarti aku mau berteman atau apa... tapi mungkin kita bisa ngobrol lagi.",
-      "Y-yah... mungkin aku terlalu cepat menilaimu. T-tapi jangan ge-er!",
     ],
   };
 
@@ -518,70 +653,35 @@ async function generateCustomPrompt(chatId: number, botName: string, latestUserM
 }
 
 async function summarizeConversation(messages: Message[]): Promise<string> {
-  return messages[messages.length - 1]?.content || "";
-}
+  if (messages.length === 0) return "";
 
-export async function generateResponse(chatId: number, userMessage: string): Promise<string> {
-  const start = performance.now();
-  let workingModel: string | null = null;
-  try {
-    console.log('Starting generateResponse');
-    const [messages, customPrompt] = await Promise.all([
-      getMessages(chatId),
-      generateCustomPrompt(chatId, "Asuka", userMessage),
-    ]);
-    console.log('Parallel operations completed', performance.now() - start, 'ms');
+  const recentMessages = messages.slice(-10);
+  const topicCounts: Record<string, number> = {};
+  const keyPhrases: Set<string> = new Set();
+  const sentiments: string[] = [];
 
-    workingModel = await getWorkingModel();
-    if (!workingModel) {
-      console.error("No working model available, using fallback response");
-      return getFallbackResponse();
-    }
+  for (const message of recentMessages) {
+    const topics = extractTopics(message.content);
+    topics.forEach(topic => {
+      topicCounts[topic] = (topicCounts[topic] || 0) + 1;
+    });
 
-    const adapter = modelAdapters[workingModel];
-    if (!adapter) {
-      throw new Error(`No adapter available for model: ${workingModel}`);
-    }
+    extractEntities(message.content).forEach(phrase => keyPhrases.add(phrase));
 
-    const conversationSummary = await summarizeConversation(messages.slice(-10));
-    const fullPrompt = `${customPrompt}\n\nConversation summary: ${conversationSummary}`;
-
-    console.log(`Attempting to generate response using model: ${workingModel}`);
-
-    const adaptiveMaxTokens = getAdaptiveMaxTokens(userMessage.length);
-    let response: string;
-
-    const hookResponse = checkConversationHooks(userMessage);
-    if (hookResponse) {
-      response = hookResponse;
-    } else {
-      const interruption = generateInterruption();
-      if (interruption) {
-        response = interruption + " ";
-      } else {
-        if (openRouterModels.includes(workingModel)) {
-          response = await adapter(messages.slice(-5), fullPrompt, apiKeys[currentKeyIndex]);
-        } else {
-          response = await adapter(messages.slice(-5), fullPrompt, "");
-        }
-      }
-    }
-
-    if (!response) {
-      throw new Error("Empty response from model");
-    }
-
-    response = postProcessResponse(response);
-    updateContextMemory(userMessage, response);
-    adjustPersonality(messages.length);
-
-    return response;
-  } catch (error) {
-    console.error(`Error in generateResponse (model: ${workingModel}):`, error);
-    return getFallbackResponse();
-  } finally {
-    console.log('generateResponse completed in', performance.now() - start, 'ms');
+    sentiments.push(analyzeSentiment(message.content));
   }
+
+  const topTopics = Object.entries(topicCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([topic]) => topic);
+
+  return `
+    Recent topics: ${topTopics.join(", ")}
+    Key phrases: ${Array.from(keyPhrases).slice(0, 5).join(", ")}
+    Overall sentiment: ${getMostFrequent(sentiments)}
+    Last message: ${recentMessages[recentMessages.length - 1].content}
+  `;
 }
 
 function postProcessResponse(response: string): string {

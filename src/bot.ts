@@ -91,28 +91,16 @@ async function streamResponse(ctx: any, chatId: number, userMessage: string) {
     console.log(`Response sent for chat ${chatId}`);
 
     const workingModel = await getWorkingModel();
-    const summary = generateConversationSummary();
+    const summary = generateConversationSummary(
+      chatId,
+      ctx.update.message.from.username || "",
+      ctx.update.message.from.first_name || "",
+      userMessage,
+      response,
+      workingModel
+    );
 
-    const outputSummary = {
-      chat_id: chatId,
-      user_name: ctx.update.message.from.username || "",
-      full_name: ctx.update.message.from.first_name || "",
-      user_message: userMessage,
-      bot_response: response,
-      model_used: workingModel,
-      current_emotion: currentEmotion,
-      tsundere_level: tsundereLevel,
-      context: {
-        topic: context.topic,
-        userInterestLevel: context.userInterestLevel,
-        botConfidenceLevel: context.botConfidenceLevel,
-        recentTopics: context.recentTopics,
-        pilotingPerformance: context.pilotingPerformance
-      },
-      summary: summary
-    };
-
-    console.log(JSON.stringify(outputSummary, null, 2));
+    console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     console.error("Error generating streaming response:", error);
     await sendResponseWithRetry(ctx, getFallbackResponse());
@@ -176,23 +164,33 @@ async function generateResponseWithTimeout(chatId: number, userMessage: string, 
   }
 }
 
-function generateConversationSummary(): object {
+function generateConversationSummary(chatId: number, userName: string, fullName: string, userMessage: string, response: string, workingModel: string | null): object {
   const topPerformance = Object.entries(botMemory.userPerformance)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 3)
     .map(([topic]) => topic);
 
   return {
-    topic: context.topic,
-    recentTopics: context.recentTopics,
-    userInterest: context.userInterestLevel,
-    botConfidence: context.botConfidenceLevel,
-    pilotingPerformance: context.pilotingPerformance,
-    topPerformanceAreas: topPerformance,
-    complimentsReceived: botMemory.complimentsReceived,
-    insultsReceived: botMemory.insults,
-    evaReferences: botMemory.mentionedEva.length,
-    pilotingSkillsMentioned: botMemory.mentionedPilotingSkills.length
+    chat_id: chatId,
+    user_name: userName,
+    full_name: fullName,
+    user_message: userMessage,
+    bot_response: response,
+    model_used: workingModel,
+    current_emotion: currentEmotion,
+    tsundere_level: tsundereLevel,
+    context: {
+      topic: context.topic,
+      userInterestLevel: context.userInterestLevel,
+      botConfidenceLevel: context.botConfidenceLevel,
+      recentTopics: context.recentTopics,
+      pilotingPerformance: context.pilotingPerformance,
+      topPerformanceAreas: topPerformance,
+      complimentsReceived: botMemory.complimentsReceived,
+      insultsReceived: botMemory.insults,
+      evaReferences: botMemory.mentionedEva.length,
+      pilotingSkillsMentioned: botMemory.mentionedPilotingSkills.length
+    }
   };
 }
 
