@@ -191,8 +191,15 @@ async function retryWithBackoff<T>(fn: (apiKey: string) => Promise<T>, maxRetrie
       const apiKey = getNextApiKey();
       return await fn(apiKey);
     } catch (error) {
+      console.error(`API call failed with key ${apiKey.substr(0, 5)}...: ${error.message}`);
+      if (error.response) {
+        console.error(`Response status: ${error.response.status}`);
+        console.error(`Response data: ${JSON.stringify(error.response.data)}`);
+      }
       if (error.status === 429 && i < maxRetries * apiKeys.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i % maxRetries)));
+        const delay = 1000 * Math.pow(2, i % maxRetries);
+        console.log(`Rate limited. Retrying in ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
       throw error;

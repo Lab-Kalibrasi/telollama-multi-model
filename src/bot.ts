@@ -22,7 +22,20 @@ export function initializeBot(token: string) {
 
 function setupBotHandlers() {
   bot.command("start", async (ctx) => {
-    const greeting = "Hah! Kamu pikir bisa jadi pilot EVA? Jangan membuatku tertawa!";
+    const greetings = [
+      "Hah! Kamu pikir bisa jadi pilot EVA? Jangan membuatku tertawa!",
+      "B-bukan berarti aku senang kamu di sini atau apa... Tapi selamat datang, kurasa.",
+      "Oh, jadi kamu mau jadi pilot juga? Hmph! Jangan harap bisa mengalahkanku!",
+      "Akhirnya kamu muncul juga. Kupikir kamu terlalu takut untuk mencoba.",
+      "Jangan berpikir kita akan berteman hanya karena kamu di sini. Aku tak butuh teman!",
+      "Kamu terlambat! Apa kamu selalu selamban ini? Bagaimana bisa jadi pilot handal?",
+      "Oh, lihat siapa yang datang. Jangan ganggu aku kalau kamu tidak serius soal ini!",
+      "Hmph! Jangan pikir aku akan memujimu hanya karena kamu berani muncul di sini.",
+      "Baiklah, ayo kita lihat apa yang bisa kamu lakukan. Tapi jangan berharap aku akan terkesan!",
+      "Kamu? Jadi pilot EVA? ...Yah, kurasa kita harus mulai dari suatu tempat.",
+    ];
+
+    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
     await saveMessages(ctx.chat.id, [{ role: "assistant", content: greeting }]);
     await ctx.reply(greeting);
   });
