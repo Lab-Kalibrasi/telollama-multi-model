@@ -428,37 +428,66 @@ async function generateResponseWithTimeout(chatId: number, userMessage: string, 
     return await Promise.race([responsePromise, timeoutPromise]);
   } catch (error) {
     console.error("Error generating response:", error);
-    return "Baka! Aku tidak bisa memikirkan respons yang bagus sekarang. Coba lagi nanti!";
+    return getFallbackResponse();
   }
 }
 
+function getFallbackResponse(): string {
+  const fallbackResponses = [
+    "Baka! Aku sedang tidak mood untuk bicara. Coba lagi nanti!",
+    "Hmph! Jangan ganggu aku sekarang. Aku sedang sibuk!",
+    "Apa sih?! Aku tidak bisa memikirkan jawaban yang bagus sekarang.",
+    "Jangan memaksaku untuk menjawab! Aku butuh waktu untuk berpikir.",
+    "B-bukan berarti aku tidak mau menjawab... Aku hanya perlu waktu!",
+  ];
+  return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
+}
+
 async function generateResponse(chatId: number, userMessage: string): Promise<string> {
-  const messages = await getMessages(chatId);
-  const customPrompt = await generateCustomPrompt(chatId, bot.me.first_name, userMessage);
-  const conversationSummary = await summarizeConversation(messages.slice(-10));
+  console.time('generateResponse');
+  try {
+    const messages = await getMessages(chatId);
+    console.timeLog('generateResponse', 'Got messages');
 
-  const selectedModel = await getWorkingModel();
-  if (!selectedModel) {
-    throw new Error("No working model available");
+    const customPrompt = await generateCustomPrompt(chatId, bot.me.first_name, userMessage);
+    console.timeLog('generateResponse', 'Generated custom prompt');
+
+    const conversationSummary = await summarizeConversation(messages.slice(-10));
+    console.timeLog('generateResponse', 'Summarized conversation');
+
+    const selectedModel = await getWorkingModel();
+    if (!selectedModel) {
+      throw new Error("No working model available");
+    }
+    console.timeLog('generateResponse', 'Got working model');
+
+    const adapter = modelAdapters[selectedModel];
+    if (!adapter) {
+      throw new Error(`No adapter available for model: ${selectedModel}`);
+    }
+
+    const fullPrompt = `${customPrompt}\n\nConversation summary: ${conversationSummary}`;
+    console.timeLog('generateResponse', 'Prepared full prompt');
+
+    let response = await retryWithBackoff((apiKey) =>
+      adapter(messages.slice(-5), fullPrompt, apiKey)
+    );
+    console.timeLog('generateResponse', 'Got response from model');
+
+    if (typeof response !== 'string') {
+      throw new Error("Invalid response from model");
+    }
+
+    response = postProcessResponse(response);
+    console.timeLog('generateResponse', 'Post-processed response');
+
+    return response;
+  } catch (error) {
+    console.error("Error in generateResponse:", error);
+    throw error;
+  } finally {
+    console.timeEnd('generateResponse');
   }
-
-  const adapter = modelAdapters[selectedModel];
-  if (!adapter) {
-    throw new Error(`No adapter available for model: ${selectedModel}`);
-  }
-
-  const fullPrompt = `${customPrompt}\n\nConversation summary: ${conversationSummary}`;
-  let response = await retryWithBackoff((apiKey) =>
-    adapter(messages.slice(-5), fullPrompt, apiKey)
-  );
-
-  if (typeof response !== 'string') {
-    throw new Error("Invalid response from model");
-  }
-
-  response = postProcessResponse(response);
-
-  return response as string;
 }
 
 function postProcessResponse(response: string): string {
@@ -493,13 +522,13 @@ async function processQueue() {
     try {
       let response = await getCachedResponse(chatId, userMessage);
       if (!response) {
-        response = await generateResponseWithTimeout(chatId, userMessage, 8000);
+        response = await generateResponseWithTimeout(chatId, userMessage, 15000); // Increased timeout to 15 seconds
         await setCachedResponse(chatId, userMessage, response);
       }
       await ctx.reply(response);
     } catch (error) {
       console.error("Error processing message:", error);
-      await ctx.reply("Baka! Ada yang salah. Coba lagi nanti!");
+      await ctx.reply(getFallbackResponse());
     }
     await delay(1000); // Add a small delay between processing messages
   }
@@ -554,7 +583,7 @@ bot.on("message", async (ctx) => {
     });
   } catch (error) {
     console.error("Error in message processing:", error);
-    ctx.reply("Baka! Ada yang salah. Coba lagi nanti, kalau kamu memang masih berani!");
+    ctx.reply(getFallbackResponse());
   }
 });
 
