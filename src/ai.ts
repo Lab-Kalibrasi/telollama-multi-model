@@ -321,7 +321,7 @@ export async function getWorkingModel(): Promise<string | null> {
 
     try {
       console.log(`Attempting to use OpenRouter model: ${model} with key: ${apiKey.substr(0, 5)}...`);
-      if (await healthCheck(model, apiKey)) {
+      if (await retryOperation(() => healthCheck(model, apiKey))) {
         console.log(`Successfully connected to model: ${model}`);
         return model;
       }
@@ -343,7 +343,7 @@ export async function getWorkingModel(): Promise<string | null> {
   for (const model of fallbackModels) {
     try {
       console.log(`Attempting to use fallback model: ${model}`);
-      if (await healthCheck(model)) {
+      if (await retryOperation(() => healthCheck(model))) {
         console.log(`Successfully connected to fallback model: ${model}`);
         return model;
       }
@@ -368,16 +368,16 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
       getMessages(chatId),
       generateCustomPrompt(chatId, "Asuka", userMessage),
     ]);
-    console.log('Parallel operations completed', performance.now() - start, 'ms');
 
-    // Get or create the conversation context for this chat
     if (!conversationContexts[chatId]) {
       conversationContexts[chatId] = new ConversationContext();
     }
     const conversationContext = conversationContexts[chatId];
 
-    // Update the context with the new user message
     conversationContext.updateContext({ role: 'user', content: userMessage });
+    updateEmotion(userMessage);
+    adjustTsundereLevel(userMessage);
+    updateContext(userMessage);
 
     workingModel = await getWorkingModel();
     if (!workingModel) {
@@ -391,7 +391,8 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
     }
 
     const contextSummary = conversationContext.getContextSummary();
-    const fullPrompt = `${customPrompt}\n\nConversation context: ${contextSummary}`;
+    const dynamicPromptAddition = generateDynamicPromptAddition();
+    const fullPrompt = `${customPrompt}\n\nConversation context: ${contextSummary}\n${dynamicPromptAddition}`;
 
     console.log(`Attempting to generate response using model: ${workingModel}`);
 
@@ -405,11 +406,10 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
       if (interruption) {
         response = interruption + " ";
       } else {
-        if (openRouterModels.includes(workingModel)) {
-          response = await adapter(messages.slice(-5), fullPrompt, apiKeys[currentKeyIndex]);
-        } else {
-          response = await adapter(messages.slice(-5), fullPrompt, "");
-        }
+        const maxTokens = getAdaptiveMaxTokens(userMessage.length);
+        response = await retryOperation(() =>
+          adapter(messages.slice(-5), fullPrompt, openRouterModels.includes(workingModel) ? apiKeys[currentKeyIndex] : "", maxTokens)
+        );
       }
     }
 
@@ -418,12 +418,14 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
     }
 
     response = postProcessResponse(response);
-
-    // Update the context with the bot's response
     conversationContext.updateContext({ role: 'assistant', content: response });
-
     updateContextMemory(userMessage, response);
     adjustPersonality(messages.length);
+
+    const suggestedTopic = suggestNextTopic(context.topic);
+    if (Math.random() < 0.3) {
+      response += ` Ngomong-ngomong, apa pendapatmu tentang ${suggestedTopic}?`;
+    }
 
     return response;
   } catch (error) {
