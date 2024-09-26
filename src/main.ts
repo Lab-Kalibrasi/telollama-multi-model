@@ -1,6 +1,6 @@
 // src/main.ts
 import { load } from "https://deno.land/std@0.177.0/dotenv/mod.ts";
-import { bot, initializeBot, handleUpdate } from './bot.ts';
+import { initializeBot, handleUpdate } from './bot.ts';
 import {
   generateResponse,
   updateEmotion,
@@ -17,10 +17,15 @@ import {
   Memory
 } from './ai.ts';
 
-// Load environment variables from .env file
-const result = await load({ export: true });
+// Load environment variables from .env file, allowing empty values
+await load({ export: true, allowEmptyValues: true });
 
-console.log("Loaded environment variables:", result);
+console.log("TELEGRAM_BOT_TOKEN:", Deno.env.get("TELEGRAM_BOT_TOKEN"));
+console.log("OPENROUTER_API_KEY:", Deno.env.get("OPENROUTER_API_KEY"));
+console.log("GOOGLE_AI_API_KEY:", Deno.env.get("GOOGLE_AI_API_KEY"));
+console.log("YOUR_SITE_URL:", Deno.env.get("YOUR_SITE_URL"));
+console.log("DATABASE_URL:", Deno.env.get("DATABASE_URL"));
+console.log("Environment variables loaded successfully.");
 
 // Check if TELEGRAM_BOT_TOKEN is set
 const TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
@@ -41,7 +46,7 @@ Deno.serve(async (req) => {
 
   if (req.method === "POST") {
     const url = new URL(req.url);
-    if (url.pathname.slice(1) === bot.token) {
+    if (url.pathname.slice(1) === TOKEN) {
       try {
         return await handleUpdate(req);
       } catch (err) {

@@ -61,11 +61,11 @@ const responseTemplates = [
 ];
 
 const openai = new OpenAI({
-  apiKey: Deno.env.get("OPENROUTER_API_KEY") || "",
+  apiKey: apiKey || "",
   baseURL: "https://openrouter.ai/api/v1",
   defaultHeaders: {
-    "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
-    "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+    "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "http://localhost",
+    "X-Title": Deno.env.get("YOUR_SITE_NAME") || "Local Development",
   },
 });
 
