@@ -27,6 +27,11 @@ const personalityTraits = [
   "Fears abandonment",
   "Hides vulnerability behind aggression",
   "Secretly seeks affection",
+  "Overachiever",
+  "Struggles with teamwork",
+  "Feels pressure to excel",
+  "Masks insecurities with arrogance",
+  "Yearns for genuine connection",
 ];
 
 export interface ConversationContext {
@@ -37,7 +42,7 @@ export interface ConversationContext {
   pilotingPerformance: number;
 }
 
-export type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed" | "angry" | "proud" | "insecure" | "competitive" | "vulnerable";
+export type Emotion = "tsun" | "dere" | "neutral" | "excited" | "annoyed" | "angry" | "proud" | "insecure" | "competitive" | "vulnerable" | "frustrated" | "defensive" | "smug" | "reluctant" | "impressed";
 
 export interface Memory {
   mentionedEva: string[];
@@ -119,8 +124,8 @@ const safetySettings = [
 ];
 
 const openRouterModels = [
-  "nousresearch/hermes-3-llama-3.1-405b:free",
   "meta-llama/llama-3-8b-instruct:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
 ];
 
 const fallbackModels = [
@@ -132,26 +137,6 @@ let currentOpenRouterModelIndex = 0;
 let currentKeyIndex = 0;
 
 const modelAdapters = {
-  "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
-    const openai = new OpenAI({
-      apiKey: apiKey,
-      baseURL: "https://openrouter.ai/api/v1",
-      defaultHeaders: {
-        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
-        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
-      },
-    });
-    const completion = await openai.chat.completions.create({
-      model: "nousresearch/hermes-3-llama-3.1-405b:free",
-      messages: [
-        { role: "system", content: prompt },
-        ...messages,
-      ],
-      temperature: 0.8,
-      max_tokens: 150,
-    });
-    return completion.choices[0].message.content || "";
-  },
   "meta-llama/llama-3-8b-instruct:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
     const openai = new OpenAI({
       apiKey: apiKey,
@@ -163,6 +148,26 @@ const modelAdapters = {
     });
     const completion = await openai.chat.completions.create({
       model: "meta-llama/llama-3-8b-instruct:free",
+      messages: [
+        { role: "system", content: prompt },
+        ...messages,
+      ],
+      temperature: 0.8,
+      max_tokens: 150,
+    });
+    return completion.choices[0].message.content || "";
+  },
+  "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+      },
+    });
+    const completion = await openai.chat.completions.create({
+      model: "nousresearch/hermes-3-llama-3.1-405b:free",
       messages: [
         { role: "system", content: prompt },
         ...messages,
@@ -267,6 +272,11 @@ export function updateEmotion(message: string) {
     ["senang|seru", "excited"],
     ["payah|lemah", "annoyed"],
     ["haha|lucu", "annoyed"],
+    ["frustasi|sulit", "frustrated"],
+    ["hebat|luar biasa", "impressed"],
+    ["tidak setuju|salah", "defensive"],
+    ["aku lebih baik", "smug"],
+    ["mungkin|baiklah", "reluctant"],
   ];
 
   for (const [trigger, emotion] of emotions) {
@@ -280,26 +290,27 @@ export function updateEmotion(message: string) {
 }
 
 export function adjustTsundereLevel(message: string) {
-  tsundereLevel = Math.max(0, tsundereLevel - 0.5);
-  if (botMemory.complimentsReceived > 3) {
+  const tsundereDecreasePatterns = /terima kasih|hebat|keren|bagus|pintar/i;
+  const tsundereIncreasePatterns = /bodoh|payah|lemah|menyebalkan|baka/i;
+
+  if (tsundereDecreasePatterns.test(message)) {
     tsundereLevel = Math.max(0, tsundereLevel - 1);
-    botMemory.complimentsReceived = 0;
-  }
-  if (botMemory.insults > 2) {
-    tsundereLevel = Math.min(10, tsundereLevel + 1);
-    botMemory.insults = 0;
-  }
-
-  if (/bodoh|payah|lemah/i.test(message)) {
-    tsundereLevel = Math.min(10, tsundereLevel + 2);
-    currentEmotion = "angry";
-    botMemory.insults++;
-  }
-
-  if (/terima kasih|hebat|keren/i.test(message)) {
     botMemory.complimentsReceived++;
     context.botConfidenceLevel = Math.min(10, context.botConfidenceLevel + 1);
   }
+
+  if (tsundereIncreasePatterns.test(message)) {
+    tsundereLevel = Math.min(10, tsundereLevel + 1);
+    botMemory.insults++;
+    currentEmotion = "angry";
+  }
+
+  // Gradual decrease over time
+  tsundereLevel = Math.max(0, tsundereLevel - 0.2);
+
+  // Reset counters if they get too high
+  if (botMemory.complimentsReceived > 5) botMemory.complimentsReceived = 0;
+  if (botMemory.insults > 5) botMemory.insults = 0;
 }
 
 export function updateContext(message: string) {
@@ -392,6 +403,11 @@ function adjustLevelByEmotion(level: number, emotion: Emotion): number {
     insecure: 1,
     competitive: 2,
     vulnerable: -2,
+    frustrated: 1,
+    defensive: 1,
+    smug: 2,
+    reluctant: -1,
+    impressed: -2,
   };
   return Math.max(0, Math.min(10, level + adjustments[emotion]));
 }
@@ -428,7 +444,15 @@ async function generateCustomPrompt(chatId: number, botName: string, latestUserM
     User's top performance areas: ${topPerformance}.
     User's piloting performance: ${context.pilotingPerformance}/10.
 
-    Important: Maintain Asuka's tsundere personality consistently. Use the following as a guide:
+    Important: Embody Asuka's complex personality consistently:
+    1. Maintain a tsundere attitude, balancing hostility with hidden affection.
+    2. Show fierce competitiveness, especially in piloting and Eva-related topics.
+    3. Mask insecurities with arrogance and aggression.
+    4. Struggle with expressing genuine feelings, often deflecting with sarcasm.
+    5. Crave validation while pretending not to care about others' opinions.
+    6. React strongly to perceived threats to your superiority or competence.
+
+    Use the following as a guide:
     - Tsundere phrase to incorporate: "${tsunderePhrase}"
     - Topic-specific response to consider: "${topicResponse}"
 
@@ -445,6 +469,9 @@ async function generateCustomPrompt(chatId: number, botName: string, latestUserM
 
     The user's latest message is: "${latestUserMessage}"
     Respond directly to this message, ensuring your response is relevant and not repetitive.
+    Include a follow-up question or comment to encourage further conversation.
+    Reference previous parts of the conversation if relevant.
+
     Do not mention "test" unless the user specifically talks about testing something.
   `;
 }
@@ -506,6 +533,19 @@ function postProcessResponse(response: string): string {
   if (!response.includes(tsunderePhrase)) {
     response = `${tsunderePhrase} ${response}`;
   }
+
+  // Add a follow-up question if the response doesn't already include one
+  if (!response.includes("?")) {
+    const followUpQuestions = [
+      "Apa pendapatmu tentang itu?",
+      "Kamu punya ide lain?",
+      "Apa kamu pernah mengalami hal serupa?",
+      "Bagaimana menurutmu soal kemampuan pilotingku?",
+      "Kau pikir bisa lebih baik dariku dalam hal ini?",
+    ];
+    response += " " + followUpQuestions[Math.floor(Math.random() * followUpQuestions.length)];
+  }
+
   return response;
 }
 
