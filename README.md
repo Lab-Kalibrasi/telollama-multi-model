@@ -20,65 +20,45 @@ Telollama is a sophisticated Telegram bot that emulates the persona of Asuka Lan
 
 ## Recent Enhancements
 
-1. **Enhanced Context Memory:**
-   - Improved tracking of conversation topics, mentioned characters, and important points
-   - Maintains a history of emotional transitions for more coherent personality shifts
+1. **Enhanced Conversation Context Tracking:**
+   - Implemented a `ConversationContext` class for improved tracking of conversation topics, entities, and sentiment
+   - Maintains a history of user preferences and conversation themes
 
-2. **Dynamic Personality Shifts:**
-   - Subtle changes in Asuka's personality based on conversation length and user interactions
-   - Gradual adjustments to tsundere level for more natural character development
+2. **Improved Conversation Summarization:**
+   - Enhanced `summarizeConversation` function to create more detailed summaries
+   - Includes recent topics, key phrases, and overall sentiment analysis
 
-3. **Conversation Hooks:**
-   - Special responses triggered by specific topics or phrases
-   - Enhances character consistency and adds depth to interactions
-
-4. **Adaptive Response Length:**
-   - Dynamically adjusts response length based on user input
-   - Ensures more balanced and natural conversation flow
-
-5. **Emotion Transition System:**
-   - Implements gradual transitions between emotional states
-   - Prevents abrupt mood changes for a more realistic personality
-
-6. **Topic Chaining:**
-   - Intelligent system for suggesting related topics
-   - Enables more natural topic transitions and extended conversations
-
-7. **Dynamic Prompt Generation:**
-   - Incorporates recent emotional changes, key points, and suggested topics into AI prompts
+3. **Dynamic Prompt Generation:**
+   - Incorporates conversation context, recent emotions, key points, and suggested topics into AI prompts
    - Results in more contextually appropriate and engaging responses
 
-8. **Interruption Mechanism:**
-   - Occasionally interrupts the conversation flow with character-appropriate interjections
-   - Adds spontaneity and realism to Asuka's behavior
+4. **Post-Processing of Responses:**
+   - Ensures responses maintain the tsundere character
+   - Adds follow-up questions to encourage continued conversation
 
-9. **Multi-API Key Support:**
-   - Rotates through multiple API keys for OpenRouter models
-   - Enhances reliability and manages rate limits more effectively
+5. **Adaptive Personality Management:**
+   - Implements subtle changes in Asuka's personality based on conversation length and user interactions
+   - Gradual adjustments to tsundere level for more natural character development
 
-10. **Fallback Model Hierarchy:**
-    - Implements a prioritized fallback system (OpenRouter -> Google AI -> Local Ollama)
-    - Ensures continuous operation even if primary models are unavailable
+6. **Enhanced Error Handling and Retry Mechanism:**
+   - Implemented a retry function for API calls to handle temporary failures
+   - Improved logging for better debugging and error tracking
 
-11. **Improved Error Handling:**
-    - Enhanced logging for better debugging and error tracking
-    - Implemented retry mechanism for API calls to handle temporary failures
+7. **Improved Topic and Entity Extraction:**
+   - Basic implementation of topic and entity extraction from messages
+   - Lays groundwork for more sophisticated NLP techniques in future updates
 
-12. **Ollama Integration:**
-    - Added support for local Ollama models as an additional fallback option
-    - Improved health checks for Ollama to ensure reliable operation
+8. **Sentiment Analysis Integration:**
+   - Basic sentiment analysis to gauge the emotional tone of messages
+   - Influences the bot's emotional responses and conversation flow
 
-13. **Dynamic Conversation Memory:**
-    - Updated context memory to include recent topics, characters, and important points
-    - Utilizes this information to generate more coherent and context-aware responses
+9. **Conversation Hooks and Interruptions:**
+   - Expanded system of conversation hooks for character-specific responses
+   - Implemented an interruption mechanism for more dynamic conversations
 
-14. **Enhanced Personality Traits:**
-    - Expanded the list of personality traits for more varied character expression
-    - Improved integration of personality traits into response generation
-
-15. **Topic-Specific Responses:**
-    - Implemented a system to store and retrieve topic-specific responses
-    - Enhances the bot's ability to maintain consistent knowledge about various subjects
+10. **Decay Mechanism for User Preferences:**
+    - Implemented a system to gradually decay old information in user preferences
+    - Ensures the conversation remains relevant to recent interactions
 
 ## How to Start
 
@@ -130,24 +110,19 @@ This will automatically restart the bot when you make changes to the source file
 
 ## Advanced Features
 
-- **Tsundere Level Adjustment:** The bot's tsundere behavior adapts based on user interactions, compliments received, and insults detected.
-- **Performance Tracking:** Monitors user's performance in various topics, influencing future interactions.
-- **Dynamic Conversation Hooks:** Triggers special responses for mentions of key characters or concepts from Neon Genesis Evangelion.
-- **Adaptive Max Tokens:** Adjusts the maximum token length for responses based on the length of user messages.
-- **Emotion Spectrum:** Implements a nuanced emotion system with gradual transitions between states.
-- **Topic Chaining:** Uses a predefined topic relationship map to suggest relevant follow-up topics.
-- **Interruption Generation:** Occasionally injects character-appropriate interruptions to add realism to conversations.
-- **Retry Mechanism:** Implements automatic retries for API calls to handle temporary failures.
+- **Enhanced Context Memory:** Tracks and utilizes a more comprehensive conversation history, including topics, entities, and sentiment.
+- **Dynamic Conversation Summarization:** Creates detailed summaries of recent conversations to inform AI responses.
+- **Adaptive Personality System:** Adjusts the bot's personality and tsundere level based on conversation length and user interactions.
+- **Sentiment-Aware Responses:** Incorporates basic sentiment analysis to tailor the emotional tone of responses.
+- **Entity and Topic Extraction:** Basic implementation for identifying key topics and entities in conversations.
+- **Information Decay Mechanism:** Gradually reduces the influence of older conversation topics and user preferences.
 
 ## Technical Details
 
-- **Multi-Model Support:** Seamlessly switches between OpenRouter models, Google AI, and local Ollama based on availability and performance.
-- **API Key Rotation:** Intelligently rotates through multiple OpenRouter API keys to optimize usage and handle rate limits.
-- **Fallback Mechanism:** Gracefully degrades to alternative models or pre-defined responses if all AI models are unavailable.
-- **Asynchronous Processing:** Utilizes asynchronous operations for improved performance and responsiveness.
-- **Persistent Storage:** Uses Turso database for storing conversation history and topic-specific responses.
-- **Error Handling:** Implements robust error handling and logging for easier debugging and maintenance.
-- **Health Checks:** Performs regular health checks on all models to ensure system reliability.
+- **ConversationContext Class:** Manages and updates detailed conversation context over time.
+- **Enhanced Prompt Engineering:** Dynamically generates AI prompts incorporating recent conversation context and suggested topics.
+- **Post-Processing Pipeline:** Ensures generated responses align with the character's personality and adds engagement elements.
+- **Basic NLP Integration:** Incorporates simple topic extraction, entity recognition, and sentiment analysis techniques.
 
 ## Tools and Technologies
 
