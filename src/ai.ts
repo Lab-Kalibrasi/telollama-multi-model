@@ -78,6 +78,14 @@ const responseTemplates = [
   ":topic? Cih, apa bagusnya?",
   "A-aku nggak butuh bantuanmu soal :topic! Aku bisa sendiri!",
   "Hmph, baiklah... Aku akan mendengarkanmu soal :topic. Tapi bukan berarti aku peduli!",
+  "J-jangan salah paham! Aku nggak tertarik sama :topic-mu atau apa...",
+  "Kamu benar-benar payah soal :topic! Tapi... mungkin aku bisa mengajarimu sedikit.",
+  "Heh, kamu lumayan juga dalam :topic. T-tapi jangan berpikir aku memujimu!",
+  "A-aku cuma kebetulan tahu banyak tentang :topic. Bukan karena aku mau membantumu atau apa!",
+  "Jangan pikir aku terkesan dengan :topic-mu! A-aku cuma... penasaran sedikit.",
+  "Hmph! Aku akan mendengarkan penjelasanmu tentang :topic. Tapi bukan berarti aku tertarik!",
+  "B-bukan berarti aku senang kamu tanya soal :topic... Aku cuma kebetulan tahu, itu saja!",
+  "Kamu nggak seburuk yang kukira soal :topic. T-tapi jangan ge-er dulu!",
 ];
 
 const openai = new OpenAI({
@@ -110,12 +118,18 @@ const safetySettings = [
   },
 ];
 
-const models = [
+const openRouterModels = [
   "nousresearch/hermes-3-llama-3.1-405b:free",
   "meta-llama/llama-3-8b-instruct:free",
+];
+
+const fallbackModels = [
   "google/gemini-pro",
   "local/ollama",
 ];
+
+let currentOpenRouterModelIndex = 0;
+let currentKeyIndex = 0;
 
 const modelAdapters = {
   "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
@@ -181,72 +195,62 @@ const modelAdapters = {
   }
 };
 
-let currentKeyIndex = 0;
-
-function getNextApiKey(): string {
-  const key = apiKeys[currentKeyIndex];
-  currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
-  return key;
-}
-
-async function retryWithBackoff<T>(fn: (apiKey: string) => Promise<T>, maxRetries = 3): Promise<T> {
-  for (let i = 0; i < maxRetries * apiKeys.length; i++) {
-    const apiKey = getNextApiKey();
-    try {
-      return await fn(apiKey);
-    } catch (error) {
-      console.error(`API call failed with key ${apiKey.substr(0, 5)}...: ${error.message}`);
-      if (error.response) {
-        console.error(`Response status: ${error.response.status}`);
-        console.error(`Response data: ${JSON.stringify(error.response.data)}`);
-      }
-      if (error.status === 429 && i < maxRetries * apiKeys.length - 1) {
-        const delay = 1000 * Math.pow(2, i % maxRetries);
-        console.log(`Rate limited. Retrying in ${delay}ms`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        continue;
-      }
-      if (i === maxRetries * apiKeys.length - 1) {
-        throw error;
-      }
-    }
-  }
-  throw new Error("Max retries reached for all API keys");
-}
-
-async function healthCheck(model: string): Promise<boolean> {
+async function healthCheck(model: string, apiKey?: string): Promise<boolean> {
   try {
     const adapter = modelAdapters[model];
     if (!adapter) {
       return false;
     }
-    const result = await retryWithBackoff((apiKey) =>
-      adapter([{ role: "user", content: "Hi" }], "You are an AI assistant.", apiKey)
-    );
-    if (!result) {
-      throw new Error("Empty response from model");
-    }
+    const result = await adapter([{ role: "user", content: "Hi" }], "You are an AI assistant.", apiKey || "");
     return typeof result === 'string' && result.length > 0;
   } catch (error) {
     console.error(`Health check failed for model ${model}:`, error);
-    throw error; // This will ensure the error is propagated
+    throw error;
   }
 }
 
 export async function getWorkingModel(): Promise<string | null> {
   const errors: Record<string, string> = {};
-  for (const model of models) {
+
+  // Try OpenRouter models first
+  for (let modelAttempt = 0; modelAttempt < openRouterModels.length * apiKeys.length; modelAttempt++) {
+    const model = openRouterModels[currentOpenRouterModelIndex];
+    const apiKey = apiKeys[currentKeyIndex];
+
     try {
-      console.log(`Attempting to use model: ${model}`);
-      if (await healthCheck(model)) {
+      console.log(`Attempting to use OpenRouter model: ${model} with key: ${apiKey.substr(0, 5)}...`);
+      if (await healthCheck(model, apiKey)) {
         console.log(`Successfully connected to model: ${model}`);
         return model;
       }
     } catch (error) {
-      console.error(`Error with model ${model}:`, error.message);
+      console.error(`Error with model ${model} and key ${apiKey.substr(0, 5)}...:`, error.message);
+      errors[`${model}-${apiKey.substr(0, 5)}`] = error.message;
+    }
+
+    // Move to the next API key
+    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+
+    // If we've tried all keys for this model, move to the next model
+    if (currentKeyIndex === 0) {
+      currentOpenRouterModelIndex = (currentOpenRouterModelIndex + 1) % openRouterModels.length;
+    }
+  }
+
+  // If all OpenRouter attempts fail, try fallback models
+  for (const model of fallbackModels) {
+    try {
+      console.log(`Attempting to use fallback model: ${model}`);
+      if (await healthCheck(model)) {
+        console.log(`Successfully connected to fallback model: ${model}`);
+        return model;
+      }
+    } catch (error) {
+      console.error(`Error with fallback model ${model}:`, error.message);
       errors[model] = error.message;
     }
   }
+
   console.error("All models failed. Errors:", errors);
   return null;
 }
@@ -475,9 +479,13 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
     const fullPrompt = `${customPrompt}\n\nConversation summary: ${conversationSummary}`;
 
     console.log(`Attempting to generate response using model: ${workingModel}`);
-    let response = await retryWithBackoff((apiKey) =>
-      adapter(messages.slice(-5), fullPrompt, apiKey)
-    );
+    let response: string;
+
+    if (openRouterModels.includes(workingModel)) {
+      response = await adapter(messages.slice(-5), fullPrompt, apiKeys[currentKeyIndex]);
+    } else {
+      response = await adapter(messages.slice(-5), fullPrompt, "");
+    }
 
     if (!response) {
       throw new Error("Empty response from model");
