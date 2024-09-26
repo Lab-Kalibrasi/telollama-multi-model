@@ -3,6 +3,7 @@ import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
 import { useDB, Message } from './utils/db.ts';
 import { load } from "https://deno.land/std@0.177.0/dotenv/mod.ts";
 import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "https://esm.sh/@google/generative-ai@0.19.0";
+import { delay } from "https://deno.land/std@0.177.0/async/delay.ts";
 
 await load({ export: true });
 
@@ -417,6 +418,20 @@ async function summarizeConversation(messages: Message[]): Promise<string> {
   return messages[messages.length - 1]?.content || "";
 }
 
+async function generateResponseWithTimeout(chatId: number, userMessage: string, timeout: number): Promise<string> {
+  const responsePromise = generateResponse(chatId, userMessage);
+  const timeoutPromise = new Promise<string>((_, reject) =>
+    setTimeout(() => reject(new Error("Response generation timed out")), timeout)
+  );
+
+  try {
+    return await Promise.race([responsePromise, timeoutPromise]);
+  } catch (error) {
+    console.error("Error generating response:", error);
+    return "Baka! Aku tidak bisa memikirkan respons yang bagus sekarang. Coba lagi nanti!";
+  }
+}
+
 async function generateResponse(chatId: number, userMessage: string): Promise<string> {
   const messages = await getMessages(chatId);
   const customPrompt = await generateCustomPrompt(chatId, bot.me.first_name, userMessage);
@@ -454,6 +469,44 @@ function postProcessResponse(response: string): string {
   return response;
 }
 
+const responseCache = new Map<string, string>();
+
+async function getCachedResponse(chatId: number, userMessage: string): Promise<string | null> {
+  const cacheKey = `${chatId}:${userMessage}`;
+  return responseCache.get(cacheKey) || null;
+}
+
+async function setCachedResponse(chatId: number, userMessage: string, response: string): Promise<void> {
+  const cacheKey = `${chatId}:${userMessage}`;
+  responseCache.set(cacheKey, response);
+}
+
+const messageQueue: Array<{ chatId: number; userMessage: string; ctx: any }> = [];
+let isProcessing = false;
+
+async function processQueue() {
+  if (isProcessing) return;
+  isProcessing = true;
+
+  while (messageQueue.length > 0) {
+    const { chatId, userMessage, ctx } = messageQueue.shift()!;
+    try {
+      let response = await getCachedResponse(chatId, userMessage);
+      if (!response) {
+        response = await generateResponseWithTimeout(chatId, userMessage, 8000);
+        await setCachedResponse(chatId, userMessage, response);
+      }
+      await ctx.reply(response);
+    } catch (error) {
+      console.error("Error processing message:", error);
+      await ctx.reply("Baka! Ada yang salah. Coba lagi nanti!");
+    }
+    await delay(1000); // Add a small delay between processing messages
+  }
+
+  isProcessing = false;
+}
+
 bot.command("start", (ctx) => {
   const greeting = "Hah! Kamu pikir bisa jadi pilot EVA? Jangan membuatku tertawa!";
   saveMessages(ctx.chat.id, [{ role: "assistant", content: greeting }]);
@@ -471,11 +524,8 @@ bot.on("message", async (ctx) => {
     adjustTsundereLevel(userMessage);
     updateContext(userMessage);
 
-    const response = await generateResponse(ctx.chat.id, userMessage);
-
-    if (typeof response !== 'string' || response.length === 0) {
-      throw new Error("No valid response generated");
-    }
+    messageQueue.push({ chatId: ctx.chat.id, userMessage, ctx });
+    processQueue();
 
     if (userMessage.toLowerCase().includes("eva") && !botMemory.mentionedEva.includes(userMessage)) {
       botMemory.mentionedEva.push(userMessage);
@@ -485,12 +535,11 @@ bot.on("message", async (ctx) => {
     }
 
     if (context.topic !== "general") {
-      await saveTopicResponse(ctx.chat.id, context.topic, response);
+      await saveTopicResponse(ctx.chat.id, context.topic, userMessage);
     }
 
     saveMessages(ctx.chat.id, [
       { role: "user", content: userMessage },
-      { role: "assistant", content: response },
     ]);
 
     console.log({
@@ -498,23 +547,26 @@ bot.on("message", async (ctx) => {
       user_name: ctx.update.message.from.username || "",
       full_name: ctx.update.message.from.first_name || "",
       message: userMessage,
-      response: response,
       model_used: await getWorkingModel(),
       current_emotion: currentEmotion,
       tsundere_level: tsundereLevel,
       context: context,
     });
-
-    ctx.reply(response);
   } catch (error) {
-    console.error("Error in chat completion:", error);
+    console.error("Error in message processing:", error);
     ctx.reply("Baka! Ada yang salah. Coba lagi nanti, kalau kamu memang masih berani!");
   }
 });
 
-const handleUpdate = webhookCallback(bot, "std/http");
+const handleUpdate = webhookCallback(bot, "std/http", {
+  timeoutMilliseconds: 30000, // Increase to 30 seconds
+});
 
 Deno.serve(async (req) => {
+  if (req.method === "GET" && new URL(req.url).pathname === "/ping") {
+    return new Response("pong", { status: 200 });
+  }
+
   if (req.method === "POST") {
     const url = new URL(req.url);
     if (url.pathname.slice(1) === bot.token) {
