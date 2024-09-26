@@ -52,6 +52,13 @@ export interface Memory {
   userPerformance: Record<string, number>;
 }
 
+interface ContextMemory {
+  lastTopics: string[];
+  lastMentionedCharacters: string[];
+  lastEmotions: Emotion[];
+  importantPoints: string[];
+}
+
 export let context: ConversationContext = {
   topic: "general",
   userInterestLevel: 0,
@@ -68,6 +75,13 @@ export let botMemory: Memory = {
   complimentsReceived: 0,
   insults: 0,
   userPerformance: {},
+};
+
+let contextMemory: ContextMemory = {
+  lastTopics: [],
+  lastMentionedCharacters: [],
+  lastEmotions: [],
+  importantPoints: [],
 };
 
 const responseTemplates = [
@@ -194,7 +208,14 @@ const modelAdapters = {
     return result.response.text();
   },
   "local/ollama": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
-    const ollama = useOllama({ model: "llama3.2:3b" }); // or any other model you have locally
+    const ollama = useOllama({ model: "llama3.2" });
+
+    // Perform a health check first
+    const isHealthy = await ollama.healthCheck();
+    if (!isHealthy) {
+      throw new Error("Ollama server is not accessible");
+    }
+
     const result = await ollama.chat(messages.map(m => ({ role: m.role, content: m.content })));
     return result;
   }
@@ -204,13 +225,16 @@ async function healthCheck(model: string, apiKey?: string): Promise<boolean> {
   try {
     const adapter = modelAdapters[model];
     if (!adapter) {
+      console.log(`No adapter found for model: ${model}`);
       return false;
     }
+    console.log(`Performing health check for model: ${model}`);
     const result = await adapter([{ role: "user", content: "Hi" }], "You are an AI assistant.", apiKey || "");
+    console.log(`Health check result for ${model}:`, result);
     return typeof result === 'string' && result.length > 0;
   } catch (error) {
     console.error(`Health check failed for model ${model}:`, error);
-    throw error;
+    return false;
   }
 }
 
@@ -229,7 +253,7 @@ export async function getWorkingModel(): Promise<string | null> {
         return model;
       }
     } catch (error) {
-      console.error(`Error with model ${model} and key ${apiKey.substr(0, 5)}...:`, error.message);
+      console.error(`Error with OpenRouter model ${model} and key ${apiKey.substr(0, 5)}...:`, error.message);
       errors[`${model}-${apiKey.substr(0, 5)}`] = error.message;
     }
 
@@ -281,12 +305,20 @@ export function updateEmotion(message: string) {
 
   for (const [trigger, emotion] of emotions) {
     if (new RegExp(trigger, "i").test(message)) {
-      currentEmotion = emotion;
+      currentEmotion = transitionEmotion(currentEmotion, emotion);
+      contextMemory.lastEmotions.push(currentEmotion);
+      if (contextMemory.lastEmotions.length > 5) {
+        contextMemory.lastEmotions.shift();
+      }
       return;
     }
   }
 
-  currentEmotion = Math.random() > 0.3 ? "tsun" : "neutral";
+  currentEmotion = transitionEmotion(currentEmotion, Math.random() > 0.3 ? "tsun" : "neutral");
+  contextMemory.lastEmotions.push(currentEmotion);
+  if (contextMemory.lastEmotions.length > 5) {
+    contextMemory.lastEmotions.shift();
+  }
 }
 
 export function adjustTsundereLevel(message: string) {
@@ -324,6 +356,11 @@ export function updateContext(message: string) {
         context.recentTopics.pop();
       }
       botMemory.userPerformance[topic] = (botMemory.userPerformance[topic] || 0) + 1;
+
+      contextMemory.lastTopics.unshift(topic);
+      if (contextMemory.lastTopics.length > 5) {
+        contextMemory.lastTopics.pop();
+      }
       break;
     }
   }
@@ -428,6 +465,8 @@ async function generateCustomPrompt(chatId: number, botName: string, latestUserM
     .map(([topic, responses]) => `${topic}: ${responses.join(", ")}`)
     .join("\n");
 
+  const dynamicPromptAddition = generateDynamicPromptAddition();
+
   return `
     You are ${botName}, a female tsundere character inspired by Asuka Langley Soryu from Neon Genesis Evangelion.
     Tsundere level: ${tsundereLevel} (0-10, 10 being most tsundere).
@@ -443,6 +482,8 @@ async function generateCustomPrompt(chatId: number, botName: string, latestUserM
     Your confidence level: ${context.botConfidenceLevel}.
     User's top performance areas: ${topPerformance}.
     User's piloting performance: ${context.pilotingPerformance}/10.
+
+    ${dynamicPromptAddition}
 
     Important: Embody Asuka's complex personality consistently:
     1. Maintain a tsundere attitude, balancing hostility with hidden affection.
@@ -506,12 +547,24 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
     const fullPrompt = `${customPrompt}\n\nConversation summary: ${conversationSummary}`;
 
     console.log(`Attempting to generate response using model: ${workingModel}`);
+
+    const adaptiveMaxTokens = getAdaptiveMaxTokens(userMessage.length);
     let response: string;
 
-    if (openRouterModels.includes(workingModel)) {
-      response = await adapter(messages.slice(-5), fullPrompt, apiKeys[currentKeyIndex]);
+    const hookResponse = checkConversationHooks(userMessage);
+    if (hookResponse) {
+      response = hookResponse;
     } else {
-      response = await adapter(messages.slice(-5), fullPrompt, "");
+      const interruption = generateInterruption();
+      if (interruption) {
+        response = interruption + " ";
+      } else {
+        if (openRouterModels.includes(workingModel)) {
+          response = await adapter(messages.slice(-5), fullPrompt, apiKeys[currentKeyIndex]);
+        } else {
+          response = await adapter(messages.slice(-5), fullPrompt, "");
+        }
+      }
     }
 
     if (!response) {
@@ -519,6 +572,9 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
     }
 
     response = postProcessResponse(response);
+    updateContextMemory(userMessage, response);
+    adjustPersonality(messages.length);
+
     return response;
   } catch (error) {
     console.error(`Error in generateResponse (model: ${workingModel}):`, error);
@@ -564,3 +620,115 @@ export function getFallbackResponse(): string {
   ];
   return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
 }
+
+function updateContextMemory(message: string, response: string) {
+  // Update lastMentionedCharacters
+  const characters = ["Shinji", "Rei", "Misato", "Gendo", "Ritsuko"];
+  characters.forEach(char => {
+    if (message.includes(char) || response.includes(char)) {
+      contextMemory.lastMentionedCharacters.unshift(char);
+    }
+  });
+  contextMemory.lastMentionedCharacters = [...new Set(contextMemory.lastMentionedCharacters)].slice(0, 5);
+
+  // Update importantPoints
+  const importantKeywords = ["Eva", "Angel", "NERV", "pilot", "Third Impact"];
+  importantKeywords.forEach(keyword => {
+    if (message.includes(keyword) || response.includes(keyword)) {
+      contextMemory.importantPoints.unshift(keyword);
+    }
+  });
+  contextMemory.importantPoints = [...new Set(contextMemory.importantPoints)].slice(0, 5);
+}
+
+function adjustPersonality(conversationLength: number) {
+  if (conversationLength > 10 && Math.random() < 0.3) {
+    tsundereLevel = Math.max(0, Math.min(10, tsundereLevel + (Math.random() * 2 - 1)));
+  }
+}
+
+const conversationHooks = [
+  { trigger: /shinji/i, response: "Hmph! Jangan sebut-sebut si bodoh itu!" },
+  { trigger: /misato/i, response: "Misato-san? Apa hubungannya dia dengan ini?" },
+  { trigger: /rei/i, response: "Wonder Girl? Apa yang kau tahu tentang dia?" },
+  { trigger: /angel/i, response: "Angel? Jangan khawatir, aku bisa mengalahkan mereka semua!" },
+  { trigger: /eva/i, response: "Eva adalah segalanya bagiku. Kau tak akan mengerti." },
+];
+
+function checkConversationHooks(message: string): string | null {
+  for (const hook of conversationHooks) {
+    if (hook.trigger.test(message)) {
+      return hook.response;
+    }
+  }
+  return null;
+}
+
+function getAdaptiveMaxTokens(userMessageLength: number): number {
+  const baseTokens = 100;
+  const additionalTokens = Math.min(userMessageLength * 1.5, 100);
+  return Math.floor(baseTokens + additionalTokens);
+}
+
+function transitionEmotion(currentEmotion: Emotion, targetEmotion: Emotion): Emotion {
+  const emotionSpectrum: Emotion[] = ["tsun", "angry", "annoyed", "neutral", "impressed", "dere"];
+  const currentIndex = emotionSpectrum.indexOf(currentEmotion);
+  const targetIndex = emotionSpectrum.indexOf(targetEmotion);
+
+  if (currentIndex === -1 || targetIndex === -1) return targetEmotion;
+
+  const step = Math.sign(targetIndex - currentIndex);
+  return emotionSpectrum[currentIndex + step];
+}
+
+const topicChains = {
+  "eva": ["piloting", "angel", "nerv"],
+  "piloting": ["synch-ratio", "training", "eva"],
+  "nerv": ["gendo", "mission", "eva"],
+  "angel": ["battle", "strategy", "eva"],
+  "synch-ratio": ["performance", "competition", "piloting"],
+};
+
+function suggestNextTopic(currentTopic: string): string {
+  const relatedTopics = topicChains[currentTopic] || [];
+  return relatedTopics[Math.floor(Math.random() * relatedTopics.length)] || "general";
+}
+
+function generateDynamicPromptAddition(): string {
+  return `
+    Recent emotional transitions: ${contextMemory.lastEmotions.join(" -> ")}
+    Key points to remember: ${contextMemory.importantPoints.join(", ")}
+    Suggested next topic: ${suggestNextTopic(context.topic)}
+    Recently mentioned characters: ${contextMemory.lastMentionedCharacters.join(", ")}
+  `;
+}
+
+function generateInterruption(): string | null {
+  if (Math.random() < 0.1) {
+    const interruptions = [
+      "Tunggu sebentar! Aku baru ingat sesuatu yang penting.",
+      "Hei, jangan mengalihkan pembicaraan!",
+      "Apa kau baru saja mengatakan itu? Tidak mungkin!",
+      "Kau tidak bisa serius, kan?",
+      "Apa kau benar-benar berpikir bisa mengalahkanku dalam hal ini?",
+    ];
+    return interruptions[Math.floor(Math.random() * interruptions.length)];
+  }
+  return null;
+}
+
+async function retryOperation<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+    }
+  }
+  throw new Error("Max retries reached");
+}
+
+// Use this function to wrap API calls that might need retrying
+// Example usage:
+// const response = await retryOperation(() => adapter(messages.slice(-5), fullPrompt, apiKey));
