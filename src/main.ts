@@ -544,26 +544,6 @@ async function processQueue() {
   isProcessing = false;
 }
 
-async function processQueue() {
-  if (isProcessing) return;
-  isProcessing = true;
-
-  while (messageQueue.length > 0) {
-    const { chatId, userMessage, ctx } = messageQueue.shift()!;
-    try {
-      console.log(`Processing message for chat ${chatId}: ${userMessage}`);
-      await streamResponse(ctx, chatId, userMessage);
-      console.log(`Response streamed for chat ${chatId}`);
-    } catch (error) {
-      console.error(`Error processing message for chat ${chatId}:`, error);
-      await sendResponseWithRetry(ctx, getFallbackResponse());
-    }
-    await delay(1000);
-  }
-
-  isProcessing = false;
-}
-
 async function sendResponseWithRetry(ctx: any, response: string, maxRetries = 3) {
   for (let i = 0; i < maxRetries; i++) {
     try {
