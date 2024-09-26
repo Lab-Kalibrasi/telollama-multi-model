@@ -30,6 +30,11 @@ Telollama is a Telegram bot that acts like Asuka Langley Soryu from Neon Genesis
 8. Simple mood analysis
 9. Special responses for certain topics
 10. Forgets old information over time
+11. Enhanced user and chat information handling
+12. Improved error handling for API responses
+13. More robust model switching and fallback mechanisms
+14. Dynamic adjustment of response length based on user input
+15. Implemented conversation hooks for specific topics
 
 ## How to Start
 

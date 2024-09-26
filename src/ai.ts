@@ -362,7 +362,12 @@ export async function getWorkingModel(): Promise<[string, string] | null> {
 
 const conversationContexts: Record<number, ConversationContext> = {};
 
-export async function generateResponse(chatId: number, userMessage: string): Promise<string> {
+export async function generateResponse(
+  chatId: number,
+  userMessage: string,
+  user: any,
+  chat: any
+): Promise<string> {
   const start = performance.now();
   let workingModel: string | null = null;
   let apiKey: string | null = null;
@@ -436,19 +441,35 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
     const safeApiKeyIdentifier = getApiKeyIdentifier(apiKey || "");
 
     const responseObject = {
-      chat_id: chatId,
-      user_name: "",
-      full_name: "",
-      user_message: userMessage,
-      bot_response: response,
-      model_used: openRouterModels.includes(workingModel)
-        ? [workingModel, safeApiKeyIdentifier, "PRIMARY_MODEL"]
-        : fallbackModels.includes(workingModel)
-          ? [workingModel, "FALLBACK_MODEL"]
-          : [workingModel, "UNKNOWN_MODEL"],
-      current_emotion: currentEmotion,
-      tsundere_level: tsundereLevel,
-      context: {
+        chat_id: chatId,
+        user: user ? {
+          id: user.id,
+          is_bot: user.is_bot,
+          first_name: user.first_name,
+          last_name: user.last_name || "",
+          username: user.username || "",
+          language_code: user.language_code || "",
+          is_premium: user.is_premium || false,
+        } : null,
+        chat: chat ? {
+          id: chat.id,
+          type: chat.type,
+          title: chat.title || "",
+          username: chat.username || "",
+          first_name: chat.first_name || "",
+          last_name: chat.last_name || "",
+          is_forum: chat.is_forum || false,
+        } : null,
+        user_message: userMessage,
+        bot_response: response,
+        model_used: openRouterModels.includes(workingModel)
+          ? [workingModel, safeApiKeyIdentifier, "PRIMARY_MODEL"]
+          : fallbackModels.includes(workingModel)
+            ? [workingModel, "FALLBACK_MODEL"]
+            : [workingModel, "UNKNOWN_MODEL"],
+        current_emotion: currentEmotion,
+        tsundere_level: tsundereLevel,
+        context: {
         topic: context.topic,
         userInterestLevel: context.userInterestLevel,
         botConfidenceLevel: context.botConfidenceLevel,

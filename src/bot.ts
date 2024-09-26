@@ -40,9 +40,10 @@ function setupBotHandlers() {
   });
 
   bot.on("message", async (ctx) => {
-    console.log("Received message from chat ID:", ctx.chat.id);
-
     if (ctx.update.message.chat.type !== "private") return;
+
+    const user = ctx.from;
+    const chat = ctx.chat;
 
     try {
       await bot.api.sendChatAction(ctx.chat.id, "typing");
@@ -54,7 +55,29 @@ function setupBotHandlers() {
       adjustTsundereLevel(userMessage);
       updateContext(userMessage);
 
-      messageQueue.push({ chatId: ctx.chat.id, userMessage, ctx });
+      messageQueue.push({
+        chatId: chat.id,
+        userMessage,
+        user: {
+          id: user.id,
+          is_bot: user.is_bot,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          username: user.username,
+          language_code: user.language_code,
+          is_premium: user.is_premium,
+        },
+        chat: {
+          id: chat.id,
+          type: chat.type,
+          title: chat.title,
+          username: chat.username,
+          first_name: chat.first_name,
+          last_name: chat.last_name,
+          is_forum: chat.is_forum,
+        },
+        ctx
+      });
       processQueue();
 
       if (userMessage.toLowerCase().includes("eva") && !botMemory.mentionedEva.includes(userMessage)) {
@@ -83,7 +106,9 @@ let isProcessing = false;
 
 async function streamResponse(ctx: any, chatId: number, userMessage: string) {
   try {
-    const response = await generateResponseWithTimeout(chatId, userMessage, 30000);
+    const user = ctx.from;
+    const chat = ctx.chat;
+    const response = await generateResponseWithTimeout(chatId, userMessage, user, chat, 30000);
     await sendResponseWithRetry(ctx, response);
     console.log(`Response sent for chat ${chatId}`);
   } catch (error) {
@@ -135,8 +160,14 @@ async function sendResponseWithRetry(ctx: any, response: string, maxRetries = 3)
   }
 }
 
-async function generateResponseWithTimeout(chatId: number, userMessage: string, timeout: number): Promise<string> {
-  const responsePromise = generateResponse(chatId, userMessage);
+async function generateResponseWithTimeout(
+  chatId: number,
+  userMessage: string,
+  user: any,
+  chat: any,
+  timeout: number
+): Promise<string> {
+  const responsePromise = generateResponse(chatId, userMessage, user, chat);
   const timeoutPromise = new Promise<string>((_, reject) =>
     setTimeout(() => reject(new Error("Response generation timed out")), timeout)
   );
