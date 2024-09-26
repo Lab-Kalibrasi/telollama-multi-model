@@ -445,49 +445,39 @@ function getFallbackResponse(): string {
 }
 
 async function generateResponse(chatId: number, userMessage: string): Promise<string> {
-  console.time('generateResponse');
+  const start = performance.now();
   try {
-    const messages = await getMessages(chatId);
-    console.timeLog('generateResponse', 'Got messages');
+    console.log('Starting generateResponse');
+    const [messages, customPrompt, workingModel] = await Promise.all([
+      getMessages(chatId),
+      generateCustomPrompt(chatId, bot.me.first_name, userMessage),
+      getWorkingModel()
+    ]);
+    console.log('Parallel operations completed', performance.now() - start, 'ms');
 
-    const customPrompt = await generateCustomPrompt(chatId, bot.me.first_name, userMessage);
-    console.timeLog('generateResponse', 'Generated custom prompt');
-
-    const conversationSummary = await summarizeConversation(messages.slice(-10));
-    console.timeLog('generateResponse', 'Summarized conversation');
-
-    const selectedModel = await getWorkingModel();
-    if (!selectedModel) {
+    if (!workingModel) {
       throw new Error("No working model available");
     }
-    console.timeLog('generateResponse', 'Got working model');
 
-    const adapter = modelAdapters[selectedModel];
+    const adapter = modelAdapters[workingModel];
     if (!adapter) {
-      throw new Error(`No adapter available for model: ${selectedModel}`);
+      throw new Error(`No adapter available for model: ${workingModel}`);
     }
 
+    const conversationSummary = await summarizeConversation(messages.slice(-10));
     const fullPrompt = `${customPrompt}\n\nConversation summary: ${conversationSummary}`;
-    console.timeLog('generateResponse', 'Prepared full prompt');
 
     let response = await retryWithBackoff((apiKey) =>
       adapter(messages.slice(-5), fullPrompt, apiKey)
     );
-    console.timeLog('generateResponse', 'Got response from model');
-
-    if (typeof response !== 'string') {
-      throw new Error("Invalid response from model");
-    }
 
     response = postProcessResponse(response);
-    console.timeLog('generateResponse', 'Post-processed response');
-
     return response;
   } catch (error) {
     console.error("Error in generateResponse:", error);
     throw error;
   } finally {
-    console.timeEnd('generateResponse');
+    console.log('generateResponse completed in', performance.now() - start, 'ms');
   }
 }
 
