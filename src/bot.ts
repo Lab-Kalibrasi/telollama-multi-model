@@ -9,7 +9,9 @@ import {
   getWorkingModel,
   getFallbackResponse,
   context,
-  botMemory
+  botMemory,
+  currentEmotion,
+  tsundereLevel
 } from './ai.ts';
 import { saveMessages, saveTopicResponse } from './utils/db.ts';
 
@@ -49,9 +51,17 @@ function setupBotHandlers() {
       await bot.api.sendChatAction(ctx.chat.id, "typing");
 
       const userMessage = ctx.update.message.text || "";
+      console.log(`User message: "${userMessage}"`);
+
       updateEmotion(userMessage);
       adjustTsundereLevel(userMessage);
       updateContext(userMessage);
+
+      console.log("Generating response...");
+      let response = await generateResponse(ctx.chat.id, userMessage);
+      console.log(`Generated response: "${response}"`);
+
+      await sendResponseWithRetry(ctx, response);
 
       messageQueue.push({ chatId: ctx.chat.id, userMessage, ctx });
       processQueue();
@@ -76,12 +86,13 @@ function setupBotHandlers() {
         chat_id: ctx.chat.id,
         user_name: ctx.update.message.from.username || "",
         full_name: ctx.update.message.from.first_name || "",
-        message: userMessage,
+        user_message: userMessage,
+        bot_response: response,
         model_used: workingModel,
-        current_emotion: context.currentEmotion,
-        tsundere_level: context.tsundereLevel,
+        current_emotion: currentEmotion,
+        tsundere_level: tsundereLevel,
         context: context,
-      });
+    });
     } catch (error) {
       console.error("Error in message processing:", error);
       await sendResponseWithRetry(ctx, getFallbackResponse());

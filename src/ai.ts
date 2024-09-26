@@ -1,7 +1,9 @@
+// ai.ts
 import { OpenAI } from "https://deno.land/x/openai@v4.28.0/mod.ts";
 import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from "https://esm.sh/@google/generative-ai@0.19.0";
 import { Message } from './utils/types.ts';
-import { getMessages, getTopicResponses } from './utils/db.ts';
+import { getMessages, getTopicResponses, saveTopicResponse } from './utils/db.ts';
+import { useOllama } from './utils/ollama.ts';
 
 const apiKeys = [
   Deno.env.get("OPENROUTER_API_KEY") || "",
@@ -45,6 +47,24 @@ export interface Memory {
   userPerformance: Record<string, number>;
 }
 
+export let context: ConversationContext = {
+  topic: "general",
+  userInterestLevel: 0,
+  botConfidenceLevel: 10,
+  recentTopics: [],
+  pilotingPerformance: 5,
+};
+
+export let currentEmotion: Emotion = "tsun";
+export let tsundereLevel = 10;
+export let botMemory: Memory = {
+  mentionedEva: [],
+  mentionedPilotingSkills: [],
+  complimentsReceived: 0,
+  insults: 0,
+  userPerformance: {},
+};
+
 const responseTemplates = [
   "Hah! :topic? Jangan bercanda!",
   "Kamu pikir kamu hebat dalam :topic? Aku jauh lebih baik!",
@@ -61,7 +81,7 @@ const responseTemplates = [
 ];
 
 const openai = new OpenAI({
-  apiKey: apiKeys || "",
+  apiKey: apiKeys[0] || "",
   baseURL: "https://openrouter.ai/api/v1",
   defaultHeaders: {
     "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "http://localhost",
@@ -88,35 +108,14 @@ const safetySettings = [
     category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
     threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
   },
-  {
-    category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-  },
 ];
 
 const models = [
   "nousresearch/hermes-3-llama-3.1-405b:free",
   "meta-llama/llama-3-8b-instruct:free",
   "google/gemini-pro",
+  "local/ollama",
 ];
-
-export let context: ConversationContext = {
-  topic: "general",
-  userInterestLevel: 0,
-  botConfidenceLevel: 10,
-  recentTopics: [],
-  pilotingPerformance: 5,
-};
-
-export let currentEmotion: Emotion = "tsun";
-export let tsundereLevel = 10;
-export let botMemory: Memory = {
-  mentionedEva: [],
-  mentionedPilotingSkills: [],
-  complimentsReceived: 0,
-  insults: 0,
-  userPerformance: {},
-};
 
 const modelAdapters = {
   "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
@@ -175,6 +174,11 @@ const modelAdapters = {
     });
     return result.response.text();
   },
+  "local/ollama": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const ollama = useOllama({ model: "llama3.2:3b" }); // or any other model you have locally
+    const result = await ollama.chat(messages.map(m => ({ role: m.role, content: m.content })));
+    return result;
+  }
 };
 
 let currentKeyIndex = 0;
@@ -187,8 +191,8 @@ function getNextApiKey(): string {
 
 async function retryWithBackoff<T>(fn: (apiKey: string) => Promise<T>, maxRetries = 3): Promise<T> {
   for (let i = 0; i < maxRetries * apiKeys.length; i++) {
+    const apiKey = getNextApiKey();
     try {
-      const apiKey = getNextApiKey();
       return await fn(apiKey);
     } catch (error) {
       console.error(`API call failed with key ${apiKey.substr(0, 5)}...: ${error.message}`);
@@ -202,7 +206,9 @@ async function retryWithBackoff<T>(fn: (apiKey: string) => Promise<T>, maxRetrie
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
-      throw error;
+      if (i === maxRetries * apiKeys.length - 1) {
+        throw error;
+      }
     }
   }
   throw new Error("Max retries reached for all API keys");
@@ -217,20 +223,31 @@ async function healthCheck(model: string): Promise<boolean> {
     const result = await retryWithBackoff((apiKey) =>
       adapter([{ role: "user", content: "Hi" }], "You are an AI assistant.", apiKey)
     );
+    if (!result) {
+      throw new Error("Empty response from model");
+    }
     return typeof result === 'string' && result.length > 0;
   } catch (error) {
     console.error(`Health check failed for model ${model}:`, error);
-    return false;
+    throw error; // This will ensure the error is propagated
   }
 }
 
 export async function getWorkingModel(): Promise<string | null> {
+  const errors: Record<string, string> = {};
   for (const model of models) {
-    if (await healthCheck(model)) {
-      return model;
+    try {
+      console.log(`Attempting to use model: ${model}`);
+      if (await healthCheck(model)) {
+        console.log(`Successfully connected to model: ${model}`);
+        return model;
+      }
+    } catch (error) {
+      console.error(`Error with model ${model}:`, error.message);
+      errors[model] = error.message;
     }
   }
-  console.error("No working models available");
+  console.error("All models failed. Errors:", errors);
   return null;
 }
 
@@ -321,18 +338,36 @@ function getTsunderePhrase(level: number, emotion: Emotion): string {
       "Hmph! Bukan berarti aku peduli atau apa...",
       "Jangan ge-er dulu!",
       "A-aku nggak butuh bantuanmu!",
+      "Cih! Kamu pikir aku terkesan? Jangan harap!",
+      "J-jangan pikir aku melakukan ini untukmu, ya!",
+      "Aku cuma kebetulan ada waktu luang, bukan karena aku mau membantumu!",
+      "Hah? Kamu mau berterima kasih? A-aku nggak butuh itu!",
+      "Jangan salah paham! Ini bukan berarti kita berteman atau apa!",
+      "Kamu... kamu nggak seburuk yang kukira. T-tapi tetap saja payah!",
     ],
     medium: [
       "Y-yah, mungkin kamu ada benarnya juga...",
       "Jangan pikir aku setuju denganmu ya!",
       "Hmph, kali ini saja aku akan mendengarkanmu.",
       "B-bukan berarti aku terkesan atau apa...",
+      "Aku nggak bilang kamu benar, tapi... yah, mungkin nggak sepenuhnya salah.",
+      "J-jangan terlalu percaya diri! Aku cuma... mengakui usahamu sedikit.",
+      "Aku nggak bilang aku suka, tapi... mungkin idenya nggak terlalu buruk.",
+      "Hmph! Kali ini saja kuakui kamu nggak payah-payah amat.",
+      "B-bukan berarti aku setuju, tapi... yah, mungkin ada benarnya juga.",
+      "Jangan ge-er ya! Aku cuma kebetulan punya pendapat yang sama.",
     ],
     low: [
       "M-mungkin kita bisa... ngobrol lagi nanti?",
       "A-aku cuma kebetulan sependapat denganmu, itu saja!",
       "J-jangan terlalu senang, tapi... kamu ada point juga.",
       "Yah... aku nggak benci-benci amat sih sama idemu.",
+      "M-mungkin kamu nggak seburuk yang kukira... tapi jangan ge-er!",
+      "A-aku nggak bilang aku suka, tapi... yah, mungkin kita bisa coba.",
+      "J-jangan salah paham! Aku cuma... tertarik sedikit dengan idemu.",
+      "Hmph! Mungkin kamu ada bakat juga... sedikit.",
+      "B-bukan berarti aku mau berteman atau apa... tapi mungkin kita bisa ngobrol lagi.",
+      "Y-yah... mungkin aku terlalu cepat menilaimu. T-tapi jangan ge-er!",
     ],
   };
 
@@ -416,17 +451,19 @@ async function summarizeConversation(messages: Message[]): Promise<string> {
 
 export async function generateResponse(chatId: number, userMessage: string): Promise<string> {
   const start = performance.now();
+  let workingModel: string | null = null;
   try {
     console.log('Starting generateResponse');
-    const [messages, customPrompt, workingModel] = await Promise.all([
+    const [messages, customPrompt] = await Promise.all([
       getMessages(chatId),
       generateCustomPrompt(chatId, "Asuka", userMessage),
-      getWorkingModel()
     ]);
     console.log('Parallel operations completed', performance.now() - start, 'ms');
 
+    workingModel = await getWorkingModel();
     if (!workingModel) {
-      throw new Error("No working model available");
+      console.error("No working model available, using fallback response");
+      return getFallbackResponse();
     }
 
     const adapter = modelAdapters[workingModel];
@@ -437,15 +474,20 @@ export async function generateResponse(chatId: number, userMessage: string): Pro
     const conversationSummary = await summarizeConversation(messages.slice(-10));
     const fullPrompt = `${customPrompt}\n\nConversation summary: ${conversationSummary}`;
 
+    console.log(`Attempting to generate response using model: ${workingModel}`);
     let response = await retryWithBackoff((apiKey) =>
       adapter(messages.slice(-5), fullPrompt, apiKey)
     );
 
+    if (!response) {
+      throw new Error("Empty response from model");
+    }
+
     response = postProcessResponse(response);
     return response;
   } catch (error) {
-    console.error("Error in generateResponse:", error);
-    throw error;
+    console.error(`Error in generateResponse (model: ${workingModel}):`, error);
+    return getFallbackResponse();
   } finally {
     console.log('generateResponse completed in', performance.now() - start, 'ms');
   }
@@ -466,6 +508,11 @@ export function getFallbackResponse(): string {
     "Apa sih?! Aku tidak bisa memikirkan jawaban yang bagus sekarang.",
     "Jangan memaksaku untuk menjawab! Aku butuh waktu untuk berpikir.",
     "B-bukan berarti aku tidak mau menjawab... Aku hanya perlu waktu!",
+    "Kau ini benar-benar menyebalkan! Tidak bisakah kau lihat aku sedang tidak ingin diganggu?",
+    "Hah? Kau masih di sini? Aku sedang tidak dalam mood untuk meladenimu.",
+    "Jangan sok akrab! Aku tidak akan menjawab pertanyaan bodohmu sekarang.",
+    "Ugh, kau ini keras kepala sekali! Aku bilang aku sedang tidak bisa menjawab!",
+    "A-aku bukannya mengabaikanmu... Aku hanya sedang tidak bisa fokus sekarang. Jangan salah paham!",
   ];
   return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
 }
