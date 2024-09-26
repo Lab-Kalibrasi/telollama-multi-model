@@ -436,16 +436,16 @@ export async function generateResponse(
     const suggestedTopic = suggestNextTopic(context.topic);
     if (Math.random() < 0.3) {
       const topicIntroductions = [
-        `Ngomong-ngomong, apa pendapatmu tentang ${suggestedTopic}?`,
+        `Ngomong-ngomong, bagaimana menurutmu soal ${suggestedTopic}?`,
         `Hei, jangan mengalihkan pembicaraan! Ayo bahas ${suggestedTopic}.`,
         `Hmph! Kau pasti tidak tahu apa-apa soal ${suggestedTopic}, kan?`,
-        `B-bukan berarti aku tertarik, tapi... bagaimana menurutmu tentang ${suggestedTopic}?`,
+        `B-bukan berarti aku tertarik, tapi... apa pendapatmu tentang ${suggestedTopic}?`,
         `Cih, aku yakin kau tidak sehandal aku dalam hal ${suggestedTopic}!`,
         `A-aku hanya penasaran... apa kau tahu sesuatu tentang ${suggestedTopic}?`,
         `Jangan ge-er ya! Aku cuma ingin tahu pendapatmu soal ${suggestedTopic}.`,
-        `Kalau kau memang sepintar itu, coba jelaskan padaku tentang ${suggestedTopic}!`,
+        `Kalau kau memang sepintar itu, coba ceritakan padaku tentang ${suggestedTopic}!`,
         `M-mungkin kita bisa... um, membahas ${suggestedTopic}? T-tapi bukan karena aku ingin mengobrol denganmu!`,
-        `Heh, aku bertaruh kau bahkan tidak tahu apa itu ${suggestedTopic}!`
+        `Heh, aku bertaruh kau bahkan tidak tahu apa-apa tentang ${suggestedTopic}!`
       ];
       response += ' ' + topicIntroductions[Math.floor(Math.random() * topicIntroductions.length)];
     }
@@ -670,49 +670,35 @@ async function generateCustomPrompt(chatId: number, botName: string, latestUserM
   const trait = personalityTraits[Math.floor(Math.random() * personalityTraits.length)];
   const topPerformance = Object.entries(botMemory.userPerformance)
     .sort(([, a], [, b]) => b - a)
-    .slice(0, 3)
+    .slice(0, 2)
     .map(([topic]) => topic)
     .join(", ");
 
   const tsunderePhrase = getTsunderePhrase(tsundereLevel, currentEmotion);
   const topicResponse = await getTopicResponse(chatId, context.topic);
-  const relevantTopicResponses = await getRelevantTopicResponses(chatId, context.recentTopics);
+  const relevantTopicResponses = await getRelevantTopicResponses(chatId, context.recentTopics.slice(0, 2));
 
   return `
     You are ${botName}, a tsundere character inspired by Asuka from Neon Genesis Evangelion. Respond in Bahasa Indonesia.
-    Personality: Tsundere level ${tsundereLevel}/10, Emotion: ${currentEmotion}, Trait: ${trait}
-    Context: Topic: ${context.topic}, Recent: ${context.recentTopics.join(", ")}
-    Memory: Eva refs: ${botMemory.mentionedEva.join(", ")}, Piloting: ${botMemory.mentionedPilotingSkills.join(", ")}
-    User: Interest ${context.userInterestLevel}/10, Top areas: ${topPerformance}, Piloting: ${context.pilotingPerformance}/10
-    Feedback: Compliments: ${botMemory.complimentsReceived}, Insults: ${botMemory.insults}
-    Your confidence: ${context.botConfidenceLevel}/10
+    Personality: Tsundere ${tsundereLevel}/10, Emotion: ${currentEmotion}, Trait: ${trait}
+    Context: Topic: ${context.topic}, User Interest: ${context.userInterestLevel}/10
+    Memory: Eva refs: ${botMemory.mentionedEva.length}, Piloting refs: ${botMemory.mentionedPilotingSkills.length}
+    User: Top areas: ${topPerformance}, Piloting: ${context.pilotingPerformance}/10
 
-    Core traits:
-    1. Tsundere: Balance hostility and hidden affection
-    2. Competitive: Especially in piloting and Eva topics
-    3. Insecure: Mask with arrogance and aggression
-    4. Guarded: Deflect genuine feelings with sarcasm
-    5. Validation-seeking: While pretending not to care
-    6. Defensive: React strongly to perceived threats
-
-    Adjust based on tsundere level:
-    - High (7-10): Aggressive, boastful, dismissive
-    - Medium (4-6): Arrogant with backhanded compliments
-    - Low (0-3): More open, but still proud and defensive
+    Core traits: Tsundere, Competitive, Insecure, Guarded, Validation-seeking, Defensive
 
     Guidelines:
-    - Use this tsundere phrase: "${tsunderePhrase}"
-    - Consider this topic response: "${topicResponse}"
-    - Reference these relevant topic responses:
+    - Respond directly to the user's message in a coherent manner
+    - Use this phrase naturally in your response: "${tsunderePhrase}"
+    - Consider these relevant topic responses, but don't use them verbatim:
       ${relevantTopicResponses}
-    - Incorporate Eva and piloting references naturally
-    - React to user's piloting performance (mock low, reluctantly praise high)
-    - Avoid repetition and exact phrase reuse
-    - Include a follow-up question or comment
-    - Reference previous conversation parts if relevant
+    - Balance hostility and hidden affection
+    - React to the user's message content (show interest but try to hide it)
+    - Keep the response focused and avoid abrupt topic changes
+    - If appropriate, include a follow-up question related to the user's message
 
     Latest user message: "${latestUserMessage}"
-    Respond directly and relevantly to this message.
+    Respond directly and relevantly to this message, maintaining your tsundere personality.
   `;
 }
 
@@ -765,19 +751,23 @@ async function summarizeConversation(messages: Message[]): Promise<string> {
 }
 
 function postProcessResponse(response: string): string {
+  // Remove topic prefixes
+  response = response.replace(/^[a-zA-Z]+:\s*/g, '');
+
   const tsunderePhrase = getTsunderePhrase(tsundereLevel, currentEmotion);
-  if (!response.includes(tsunderePhrase)) {
+  if (!response.toLowerCase().includes(tsunderePhrase.toLowerCase())) {
     response = `${tsunderePhrase} ${response}`;
   }
 
-  // Add a follow-up question if the response doesn't already include one
+  // Only add a follow-up question if the response doesn't already include one
   if (!response.includes("?")) {
     const followUpQuestions = [
-      "Apa pendapatmu tentang itu?",
-      "Kamu punya ide lain?",
-      "Apa kamu pernah mengalami hal serupa?",
-      "Bagaimana menurutmu soal kemampuan pilotingku?",
-      "Kau pikir bisa lebih baik dariku dalam hal ini?",
+      "Apa menurutmu itu penting?",
+      "Kenapa kamu tertarik sama hal seperti itu?",
+      "Kamu nggak berpikir itu lebih keren dari Eva-ku, kan?",
+      "Apa kamu sering memperhatikan hal-hal sepele begitu?",
+      "Hmph, kamu pikir kamu tahu banyak tentang ini?",
+      "B-bukan berarti aku peduli, tapi... apa kamu punya pengalaman dengan hal itu?",
     ];
     response += " " + followUpQuestions[Math.floor(Math.random() * followUpQuestions.length)];
   }
@@ -910,8 +900,27 @@ const topicChains = {
 };
 
 function suggestNextTopic(currentTopic: string): string {
-  const relatedTopics = topicChains[currentTopic] || [];
-  return relatedTopics[Math.floor(Math.random() * relatedTopics.length)] || "general";
+  const commonTopics = [
+    "hari ini",
+    "cuaca",
+    "rencanamu",
+    "latihan terakhirmu",
+    "NERV",
+    "Eva-mu",
+    "Angel terakhir",
+    "Shinji",
+    "Rei",
+    "Misato",
+    "sekolah",
+    "Tokyo-3",
+  ];
+
+  if (currentTopic === "general" || !topicChains[currentTopic]) {
+    return commonTopics[Math.floor(Math.random() * commonTopics.length)];
+  }
+
+  const relatedTopics = topicChains[currentTopic];
+  return relatedTopics[Math.floor(Math.random() * relatedTopics.length)];
 }
 
 function generateDynamicPromptAddition(): string {
