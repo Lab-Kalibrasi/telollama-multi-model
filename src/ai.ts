@@ -213,12 +213,12 @@ const safetySettings = [
 
 const openRouterModels = [
   "meta-llama/llama-3-8b-instruct:free",
-  "nousresearch/hermes-3-llama-3.1-405b:free",
+  // "nousresearch/hermes-3-llama-3.1-405b:free",
 ];
 
 const fallbackModels = [
-  "google/gemini-pro",
-  // "local/ollama",
+  // "google/gemini-pro",
+  // // "local/ollama",
 ];
 
 let currentOpenRouterModelIndex = 0;
@@ -403,7 +403,8 @@ export async function generateResponse(
 
     const contextSummary = conversationContext.getContextSummary();
     const dynamicPromptAddition = generateDynamicPromptAddition();
-    const fullPrompt = `${customPrompt}\n\nConversation context: ${contextSummary}\n${dynamicPromptAddition}`;
+    const conversationSummary = await summarizeConversation(messages);
+    const fullPrompt = `${customPrompt}\n\nConversation context: ${contextSummary}\n${dynamicPromptAddition}\n\nConversation Summary: ${conversationSummary}`;
 
     console.log(`Attempting to generate response using model: ${workingModel}`);
 
@@ -433,55 +434,53 @@ export async function generateResponse(
     updateContextMemory(userMessage, response);
     adjustPersonality(messages.length);
 
+    // Save the topic response
+    await saveTopicResponse(chatId, context.topic, response);
+
     const suggestedTopic = suggestNextTopic(context.recentTopics);
-      if (Math.random() < 0.3) {
-        const topicIntroductions = [
-          `Ngomong-ngomong, bagaimana menurutmu soal ${suggestedTopic}?`,
-          `Hei, jangan mengalihkan pembicaraan! Ayo bahas ${suggestedTopic}.`,
-          `Hmph! Kau pasti tidak tahu apa-apa soal ${suggestedTopic}, kan?`,
-          `B-bukan berarti aku tertarik, tapi... apa pendapatmu tentang ${suggestedTopic}?`,
-          `Cih, aku yakin kau tidak sehandal aku dalam hal ${suggestedTopic}!`,
-          `A-aku hanya penasaran... apa kau tahu sesuatu tentang ${suggestedTopic}?`,
-          `Jangan ge-er ya! Aku cuma ingin tahu pendapatmu soal ${suggestedTopic}.`,
-          `Kalau kau memang sepintar itu, coba ceritakan padaku tentang ${suggestedTopic}!`,
-          `M-mungkin kita bisa... um, membahas ${suggestedTopic}? T-tapi bukan karena aku ingin mengobrol denganmu!`,
-          `Heh, aku bertaruh kau bahkan tidak tahu apa-apa tentang ${suggestedTopic}!`
-        ];
-        response += ' ' + topicIntroductions[Math.floor(Math.random() * topicIntroductions.length)];
-      }
+    if (Math.random() < 0.3) {
+      const topicIntroductions = [
+        `Ngomong-ngomong, bagaimana menurutmu soal ${suggestedTopic}?`,
+        `Hei, jangan mengalihkan pembicaraan! Ayo bahas ${suggestedTopic}.`,
+        `Hmph! Kau pasti tidak tahu apa-apa soal ${suggestedTopic}, kan?`,
+        `B-bukan berarti aku tertarik, tapi... apa pendapatmu tentang ${suggestedTopic}?`,
+        `Cih, aku yakin kau tidak sehandal aku dalam hal ${suggestedTopic}!`,
+      ];
+      response += ' ' + topicIntroductions[Math.floor(Math.random() * topicIntroductions.length)];
+    }
 
     const safeApiKeyIdentifier = getApiKeyIdentifier(apiKey || "");
 
     const responseObject = {
-        chat_id: chatId,
-        user: user ? {
-          id: user.id,
-          is_bot: user.is_bot,
-          first_name: user.first_name,
-          last_name: user.last_name || "",
-          username: user.username || "",
-          language_code: user.language_code || "",
-          is_premium: user.is_premium || false,
-        } : null,
-        chat: chat ? {
-          id: chat.id,
-          type: chat.type,
-          title: chat.title || "",
-          username: chat.username || "",
-          first_name: chat.first_name || "",
-          last_name: chat.last_name || "",
-          is_forum: chat.is_forum || false,
-        } : null,
-        user_message: userMessage,
-        bot_response: response,
-        model_used: openRouterModels.includes(workingModel)
-          ? [workingModel, safeApiKeyIdentifier, "PRIMARY_MODEL"]
-          : fallbackModels.includes(workingModel)
-            ? [workingModel, "FALLBACK_MODEL"]
-            : [workingModel, "UNKNOWN_MODEL"],
-        current_emotion: currentEmotion,
-        tsundere_level: tsundereLevel,
-        context: {
+      chat_id: chatId,
+      user: user ? {
+        id: user.id,
+        is_bot: user.is_bot,
+        first_name: user.first_name,
+        last_name: user.last_name || "",
+        username: user.username || "",
+        language_code: user.language_code || "",
+        is_premium: user.is_premium || false,
+      } : null,
+      chat: chat ? {
+        id: chat.id,
+        type: chat.type,
+        title: chat.title || "",
+        username: chat.username || "",
+        first_name: chat.first_name || "",
+        last_name: chat.last_name || "",
+        is_forum: chat.is_forum || false,
+      } : null,
+      user_message: userMessage,
+      bot_response: response,
+      model_used: openRouterModels.includes(workingModel)
+        ? [workingModel, safeApiKeyIdentifier, "PRIMARY_MODEL"]
+        : fallbackModels.includes(workingModel)
+          ? [workingModel, "FALLBACK_MODEL"]
+          : [workingModel, "UNKNOWN_MODEL"],
+      current_emotion: currentEmotion,
+      tsundere_level: tsundereLevel,
+      context: {
         topic: context.topic,
         userInterestLevel: context.userInterestLevel,
         botConfidenceLevel: context.botConfidenceLevel,
@@ -900,14 +899,6 @@ const topicChains = {
 };
 
 function suggestNextTopic(recentTopics: string[]): string {
-  const topicChains = {
-    "eva": ["piloting", "angel", "nerv"],
-    "piloting": ["synch-ratio", "training", "eva"],
-    "nerv": ["gendo", "mission", "eva"],
-    "angel": ["battle", "strategy", "eva"],
-    "synch-ratio": ["performance", "competition", "piloting"],
-  };
-
   const commonTopics = [
     "hari ini",
     "cuaca",
@@ -923,21 +914,16 @@ function suggestNextTopic(recentTopics: string[]): string {
     "Tokyo-3",
   ];
 
-  // Get unique topics from the last three
   const uniqueRecentTopics = [...new Set(recentTopics.slice(0, 3))];
-
-  // Collect all related topics
   const relatedTopics = uniqueRecentTopics.flatMap(topic => topicChains[topic] || []);
 
   if (relatedTopics.length > 0) {
-    // Filter out topics that were recently discussed
     const newTopics = relatedTopics.filter(topic => !uniqueRecentTopics.includes(topic));
     if (newTopics.length > 0) {
       return newTopics[Math.floor(Math.random() * newTopics.length)];
     }
   }
 
-  // If no new related topics, return a random common topic
   return commonTopics[Math.floor(Math.random() * commonTopics.length)];
 }
 
