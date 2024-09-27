@@ -433,22 +433,22 @@ export async function generateResponse(
     updateContextMemory(userMessage, response);
     adjustPersonality(messages.length);
 
-    const suggestedTopic = suggestNextTopic(context.topic);
-    if (Math.random() < 0.3) {
-      const topicIntroductions = [
-        `Ngomong-ngomong, bagaimana menurutmu soal ${suggestedTopic}?`,
-        `Hei, jangan mengalihkan pembicaraan! Ayo bahas ${suggestedTopic}.`,
-        `Hmph! Kau pasti tidak tahu apa-apa soal ${suggestedTopic}, kan?`,
-        `B-bukan berarti aku tertarik, tapi... apa pendapatmu tentang ${suggestedTopic}?`,
-        `Cih, aku yakin kau tidak sehandal aku dalam hal ${suggestedTopic}!`,
-        `A-aku hanya penasaran... apa kau tahu sesuatu tentang ${suggestedTopic}?`,
-        `Jangan ge-er ya! Aku cuma ingin tahu pendapatmu soal ${suggestedTopic}.`,
-        `Kalau kau memang sepintar itu, coba ceritakan padaku tentang ${suggestedTopic}!`,
-        `M-mungkin kita bisa... um, membahas ${suggestedTopic}? T-tapi bukan karena aku ingin mengobrol denganmu!`,
-        `Heh, aku bertaruh kau bahkan tidak tahu apa-apa tentang ${suggestedTopic}!`
-      ];
-      response += ' ' + topicIntroductions[Math.floor(Math.random() * topicIntroductions.length)];
-    }
+    const suggestedTopic = suggestNextTopic(context.recentTopics);
+      if (Math.random() < 0.3) {
+        const topicIntroductions = [
+          `Ngomong-ngomong, bagaimana menurutmu soal ${suggestedTopic}?`,
+          `Hei, jangan mengalihkan pembicaraan! Ayo bahas ${suggestedTopic}.`,
+          `Hmph! Kau pasti tidak tahu apa-apa soal ${suggestedTopic}, kan?`,
+          `B-bukan berarti aku tertarik, tapi... apa pendapatmu tentang ${suggestedTopic}?`,
+          `Cih, aku yakin kau tidak sehandal aku dalam hal ${suggestedTopic}!`,
+          `A-aku hanya penasaran... apa kau tahu sesuatu tentang ${suggestedTopic}?`,
+          `Jangan ge-er ya! Aku cuma ingin tahu pendapatmu soal ${suggestedTopic}.`,
+          `Kalau kau memang sepintar itu, coba ceritakan padaku tentang ${suggestedTopic}!`,
+          `M-mungkin kita bisa... um, membahas ${suggestedTopic}? T-tapi bukan karena aku ingin mengobrol denganmu!`,
+          `Heh, aku bertaruh kau bahkan tidak tahu apa-apa tentang ${suggestedTopic}!`
+        ];
+        response += ' ' + topicIntroductions[Math.floor(Math.random() * topicIntroductions.length)];
+      }
 
     const safeApiKeyIdentifier = getApiKeyIdentifier(apiKey || "");
 
@@ -899,7 +899,15 @@ const topicChains = {
   "synch-ratio": ["performance", "competition", "piloting"],
 };
 
-function suggestNextTopic(currentTopic: string): string {
+function suggestNextTopic(recentTopics: string[]): string {
+  const topicChains = {
+    "eva": ["piloting", "angel", "nerv"],
+    "piloting": ["synch-ratio", "training", "eva"],
+    "nerv": ["gendo", "mission", "eva"],
+    "angel": ["battle", "strategy", "eva"],
+    "synch-ratio": ["performance", "competition", "piloting"],
+  };
+
   const commonTopics = [
     "hari ini",
     "cuaca",
@@ -915,12 +923,22 @@ function suggestNextTopic(currentTopic: string): string {
     "Tokyo-3",
   ];
 
-  if (currentTopic === "general" || !topicChains[currentTopic]) {
-    return commonTopics[Math.floor(Math.random() * commonTopics.length)];
+  // Get unique topics from the last three
+  const uniqueRecentTopics = [...new Set(recentTopics.slice(0, 3))];
+
+  // Collect all related topics
+  const relatedTopics = uniqueRecentTopics.flatMap(topic => topicChains[topic] || []);
+
+  if (relatedTopics.length > 0) {
+    // Filter out topics that were recently discussed
+    const newTopics = relatedTopics.filter(topic => !uniqueRecentTopics.includes(topic));
+    if (newTopics.length > 0) {
+      return newTopics[Math.floor(Math.random() * newTopics.length)];
+    }
   }
 
-  const relatedTopics = topicChains[currentTopic];
-  return relatedTopics[Math.floor(Math.random() * relatedTopics.length)];
+  // If no new related topics, return a random common topic
+  return commonTopics[Math.floor(Math.random() * commonTopics.length)];
 }
 
 function generateDynamicPromptAddition(): string {
