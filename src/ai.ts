@@ -232,24 +232,35 @@ let currentKeyIndex = 0;
 
 const modelAdapters = {
   "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
-    const openai = new OpenAI({
-      apiKey: apiKey,
-      baseURL: "https://openrouter.ai/api/v1",
-      defaultHeaders: {
-        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
-        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
-      },
-    });
-    const completion = await openai.chat.completions.create({
-      model: "nousresearch/hermes-3-llama-3.1-405b:free",
-      messages: [
-        { role: "system", content: prompt },
-        ...messages,
-      ],
-      temperature: 0.8,
-      max_tokens: 150,
-    });
-    return completion.choices[0].message.content || "";
+    try {
+      const openai = new OpenAI({
+        apiKey: apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+        defaultHeaders: {
+          "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "http://localhost",
+          "X-Title": Deno.env.get("YOUR_SITE_NAME") || "Local Development",
+        },
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: "nousresearch/hermes-3-llama-3.1-405b:free",
+        messages: [
+          { role: "system", content: prompt },
+          ...messages,
+        ],
+        temperature: 0.8,
+        max_tokens: 150,
+      });
+
+      if (!completion.choices || completion.choices.length === 0) {
+        throw new Error("No completion choices returned from the API");
+      }
+
+      return completion.choices[0].message?.content || "";
+    } catch (error) {
+      console.error("Error in nousresearch/hermes-3-llama-3.1-405b:free model:", error);
+      throw error; // Re-throw the error for the caller to handle
+    }
   },
   "meta-llama/llama-3-8b-instruct:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
     const openai = new OpenAI({
