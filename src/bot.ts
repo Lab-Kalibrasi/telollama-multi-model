@@ -128,7 +128,7 @@ async function processQueue() {
       await streamResponse(ctx, chatId, userMessage);
     } catch (error) {
       console.error(`Error processing message for chat ${chatId}:`, error);
-      await sendResponseWithRetry(ctx, getFallbackResponse());
+      await sendMessageToUser(ctx, getFallbackResponse());
     }
     await delay(1000);
   }
@@ -177,6 +177,15 @@ async function generateResponseWithTimeout(
   } catch (error) {
     console.error("Error generating response:", error);
     return getFallbackResponse();
+  }
+}
+
+async function sendMessageToUser(ctx: any, message: string) {
+  try {
+    await sendResponseWithRetry(ctx, message);
+    console.log("Message sent successfully:", message);
+  } catch (error) {
+    console.error("Error sending message to user:", error);
   }
 }
 

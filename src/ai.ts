@@ -511,7 +511,7 @@ export async function generateResponse(
   let apiKey: string | null = null;
 
   try {
-    console.log('Starting generateResponse');
+    console.log('Starting generateResponse for message:', userMessage);
     const [messages, customPrompt] = await Promise.all([
       getMessages(chatId),
       generateCustomPrompt(chatId, "Asuka", userMessage),
@@ -527,44 +527,57 @@ export async function generateResponse(
     adjustTsundereLevel(userMessage);
     updateContext(userMessage);
 
-    const modelAndKey = await getWorkingModel();
-    if (!modelAndKey) {
-      console.error("No working model available, using fallback response");
-      return getFallbackResponse();
-    }
+    let response: string = "";
+    let attempts = 0;
+    const maxAttempts = 3;
 
-    [workingModel, apiKey] = modelAndKey;
-    const adapter = modelAdapters[workingModel];
-    if (!adapter) {
-      throw new Error(`No adapter available for model: ${workingModel}`);
-    }
+    while (!response && attempts < maxAttempts) {
+      try {
+        const modelAndKey = await getWorkingModel();
+        if (!modelAndKey) {
+          console.error("No working model available, using fallback response");
+          return getFallbackResponse();
+        }
 
-    const contextSummary = conversationContext.getContextSummary();
-    const dynamicPromptAddition = generateDynamicPromptAddition();
-    const conversationSummary = await summarizeConversation(messages);
-    const fullPrompt = `${customPrompt}\n\nConversation context: ${contextSummary}\n${dynamicPromptAddition}\n\nConversation Summary: ${conversationSummary}`;
+        [workingModel, apiKey] = modelAndKey;
+        const adapter = modelAdapters[workingModel];
+        if (!adapter) {
+          throw new Error(`No adapter available for model: ${workingModel}`);
+        }
 
-    console.log(`Attempting to generate response using model: ${workingModel}`);
+        const contextSummary = conversationContext.getContextSummary();
+        const dynamicPromptAddition = generateDynamicPromptAddition();
+        const conversationSummary = await summarizeConversation(messages);
+        const fullPrompt = `${customPrompt}\n\nConversation context: ${contextSummary}\n${dynamicPromptAddition}\n\nConversation Summary: ${conversationSummary}`;
 
-    let response: string;
+        console.log(`Attempting to generate response using model: ${workingModel}`);
 
-    const hookResponse = checkConversationHooks(userMessage);
-    if (hookResponse) {
-      response = hookResponse;
-    } else {
-      const interruption = generateInterruption();
-      if (interruption) {
-        response = interruption + " ";
-      } else {
-        const maxTokens = getAdaptiveMaxTokens(userMessage.length);
-        response = await retryOperation(() =>
-          adapter(messages.slice(-5), fullPrompt, apiKey || "", maxTokens)
-        );
+        const hookResponse = checkConversationHooks(userMessage);
+        if (hookResponse) {
+          response = hookResponse;
+        } else {
+          const interruption = generateInterruption();
+          if (interruption) {
+            response = interruption + " ";
+          } else {
+            const maxTokens = getAdaptiveMaxTokens(userMessage.length);
+            response = await retryOperation(() =>
+              adapter(messages.slice(-5), fullPrompt, apiKey || "", maxTokens)
+            );
+          }
+        }
+
+        if (!response) {
+          throw new Error("Empty response from model");
+        }
+      } catch (error) {
+        console.error(`Attempt ${attempts + 1} failed:`, error);
+        attempts++;
+        if (attempts >= maxAttempts) {
+          console.error("Max attempts reached, using fallback response");
+          return getFallbackResponse();
+        }
       }
-    }
-
-    if (!response) {
-      throw new Error("Empty response from model");
     }
 
     response = postProcessResponse(response);
