@@ -495,6 +495,7 @@ export async function getWorkingModel(): Promise<[string, string] | null> {
   }
 
   console.error("All models failed. Errors:", JSON.stringify(errors, null, 2));
+  return null;
 }
 
 const conversationContexts: Record<number, ConversationContext> = {};
