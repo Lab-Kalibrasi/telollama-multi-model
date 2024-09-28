@@ -212,19 +212,45 @@ const safetySettings = [
 ];
 
 const openRouterModels = [
+  "nousresearch/hermes-3-llama-3.1-405b:free",
   "meta-llama/llama-3-8b-instruct:free",
-  // "nousresearch/hermes-3-llama-3.1-405b:free",
+  "qwen/qwen-2-7b-instruct:free",
+  "google/gemma-2-9b-it:free",
+  "mistralai/mistral-7b-instruct:free",
+  "microsoft/phi-3-mini-128k-instruct:free",
+  "gryphe/mythomist-7b:free",
+  "openchat/openchat-7b:free",
 ];
 
 const fallbackModels = [
-  // "google/gemini-pro",
-  // // "local/ollama",
+  "google/gemini-pro",
+  // "local/ollama",
 ];
 
 let currentOpenRouterModelIndex = 0;
 let currentKeyIndex = 0;
 
 const modelAdapters = {
+  "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+      },
+    });
+    const completion = await openai.chat.completions.create({
+      model: "nousresearch/hermes-3-llama-3.1-405b:free",
+      messages: [
+        { role: "system", content: prompt },
+        ...messages,
+      ],
+      temperature: 0.8,
+      max_tokens: 150,
+    });
+    return completion.choices[0].message.content || "";
+  },
   "meta-llama/llama-3-8b-instruct:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
     const openai = new OpenAI({
       apiKey: apiKey,
@@ -245,7 +271,7 @@ const modelAdapters = {
     });
     return completion.choices[0].message.content || "";
   },
-  "nousresearch/hermes-3-llama-3.1-405b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+  "qwen/qwen-2-7b-instruct:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
     const openai = new OpenAI({
       apiKey: apiKey,
       baseURL: "https://openrouter.ai/api/v1",
@@ -255,7 +281,107 @@ const modelAdapters = {
       },
     });
     const completion = await openai.chat.completions.create({
-      model: "nousresearch/hermes-3-llama-3.1-405b:free",
+      model: "qwen/qwen-2-7b-instruct:free",
+      messages: [
+        { role: "system", content: prompt },
+        ...messages,
+      ],
+      temperature: 0.8,
+      max_tokens: 150,
+    });
+    return completion.choices[0].message.content || "";
+  },
+  "google/gemma-2-9b-it:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+      },
+    });
+    const completion = await openai.chat.completions.create({
+      model: "google/gemma-2-9b-it:free",
+      messages: [
+        { role: "system", content: prompt },
+        ...messages,
+      ],
+      temperature: 0.8,
+      max_tokens: 150,
+    });
+    return completion.choices[0].message.content || "";
+  },
+  "mistralai/mistral-7b-instruct:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+      },
+    });
+    const completion = await openai.chat.completions.create({
+      model: "mistralai/mistral-7b-instruct:free",
+      messages: [
+        { role: "system", content: prompt },
+        ...messages,
+      ],
+      temperature: 0.8,
+      max_tokens: 150,
+    });
+    return completion.choices[0].message.content || "";
+  },
+  "microsoft/phi-3-mini-128k-instruct:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+      },
+    });
+    const completion = await openai.chat.completions.create({
+      model: "microsoft/phi-3-mini-128k-instruct:free",
+      messages: [
+        { role: "system", content: prompt },
+        ...messages,
+      ],
+      temperature: 0.8,
+      max_tokens: 150,
+    });
+    return completion.choices[0].message.content || "";
+  },
+  "gryphe/mythomist-7b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+      },
+    });
+    const completion = await openai.chat.completions.create({
+      model: "gryphe/mythomist-7b:free",
+      messages: [
+        { role: "system", content: prompt },
+        ...messages,
+      ],
+      temperature: 0.8,
+      max_tokens: 150,
+    });
+    return completion.choices[0].message.content || "";
+  },
+  "openchat/openchat-7b:free": async (messages: Message[], prompt: string, apiKey: string): Promise<string> => {
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": Deno.env.get("YOUR_SITE_URL") || "",
+        "X-Title": Deno.env.get("YOUR_SITE_NAME") || "",
+      },
+    });
+    const completion = await openai.chat.completions.create({
+      model: "openchat/openchat-7b:free",
       messages: [
         { role: "system", content: prompt },
         ...messages,
